@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { extend } from '@react-three/fiber'
 import glsl from 'babel-plugin-glsl/macro'
-
+import { useGLTF } from '@react-three/drei'
 function getPoint(v, size, data, offset) {
   v.set(Math.random() * 2 - 1, Math.random() * 2 - 1, Math.random() * 2 - 1)
   if (v.length() > 1) return getPoint(v, size, data, offset)
@@ -16,9 +16,15 @@ function getSphere(count, size, p = new THREE.Vector4()) {
 
 class SimulationMaterial extends THREE.ShaderMaterial {
   constructor() {
-    const positionsTexture = new THREE.DataTexture(getSphere(512 * 512, 128), 512, 512, THREE.RGBAFormat, THREE.FloatType)
+    const a = new THREE.TorusKnotGeometry( 10, 3, 300, 100 ); 
+    //const positionsTexture = new THREE.DataTexture(getSphere(150 * 150, 128), 150, 150, THREE.RGBAFormat, THREE.FloatType)
+ 
+   const aa= useGLTF('Flamingo.glb')
+   
+  // const positionsTexture = new THREE.DataTexture(aa.scene.children[0].geometry.attributes.position, 150, 150, THREE.RGBAFormat, THREE.FloatType)
+   const positionsTexture = new THREE.DataTexture(a.attributes.position, 150, 150, THREE.RGBAFormat, THREE.FloatType)
     positionsTexture.needsUpdate = true
-
+    console.log(a,positionsTexture.source.data.data  )
     super({
       vertexShader: `varying vec2 vUv;
       void main() {
@@ -32,16 +38,17 @@ class SimulationMaterial extends THREE.ShaderMaterial {
       #pragma glslify: curl = require(glsl-curl-noise2)
       #pragma glslify: noise = require(glsl-noise/classic/3d.glsl)      
       void main() {
-        float t = uTime * 0.015;
+        float t = uTime * 0.00015;
         vec3 pos = texture2D(positions, vUv).rgb; // basic simulation: displays the particles in place.
-        vec3 curlPos = texture2D(positions, vUv).rgb;
-        pos = curl(pos * uCurlFreq + t);
-        curlPos = curl(curlPos * uCurlFreq + t);
-        curlPos += curl(curlPos * uCurlFreq * 2.0) * 0.5;
-        curlPos += curl(curlPos * uCurlFreq * 4.0) * 0.25;
-        curlPos += curl(curlPos * uCurlFreq * 8.0) * 0.125;
-        curlPos += curl(pos * uCurlFreq * 16.0) * 0.0625;
-        gl_FragColor = vec4(mix(pos, curlPos, noise(pos + t)), 1.0);
+        // vec3 curlPos = texture2D(positions, vUv).rgb;
+         pos = curl(pos * uCurlFreq + t);
+        // curlPos = curl(curlPos * uCurlFreq + t);
+        // // curlPos += curl(curlPos * uCurlFreq * 2.0) * 0.5;
+        // // curlPos += curl(curlPos * uCurlFreq * 4.0) * 0.25;
+        // // curlPos += curl(curlPos * uCurlFreq * 8.0) * 0.125;
+        // // curlPos += curl(pos * uCurlFreq * 16.0) * 0.0625;
+        gl_FragColor = vec4(pos, 1.0);
+        
       }`,
       uniforms: {
         positions: { value: positionsTexture },

@@ -5,7 +5,8 @@ import { useFBO } from '@react-three/drei'
 import './shaders/simulationMaterial'
 import './shaders/dofPointsMaterial'
 
-export function Particles({ speed, fov, aperture, focus, curl, size = 512, ...props }) {
+
+export function Particles({ speed, fov, aperture, focus, curl, size = 150, ...props }) {
   const simRef = useRef()
   const renderRef = useRef()
   // Set up FBO
@@ -30,6 +31,7 @@ export function Particles({ speed, fov, aperture, focus, curl, size = 512, ...pr
     }
     return particles
   }, [size])
+ 
   // Update FBO and pointcloud every frame
   useFrame((state) => {
     state.gl.setRenderTarget(target)
@@ -37,12 +39,12 @@ export function Particles({ speed, fov, aperture, focus, curl, size = 512, ...pr
     state.gl.render(scene, camera)
     state.gl.setRenderTarget(null)
     renderRef.current.uniforms.positions.value = target.texture
-    renderRef.current.uniforms.uTime.value = state.clock.elapsedTime
-    renderRef.current.uniforms.uFocus.value = THREE.MathUtils.lerp(renderRef.current.uniforms.uFocus.value, focus, 0.1)
-    renderRef.current.uniforms.uFov.value = THREE.MathUtils.lerp(renderRef.current.uniforms.uFov.value, fov, 0.1)
-    renderRef.current.uniforms.uBlur.value = THREE.MathUtils.lerp(renderRef.current.uniforms.uBlur.value, (5.6 - aperture) * 9, 0.1)
+   // renderRef.current.uniforms.uTime.value = state.clock.elapsedTime
+    renderRef.current.uniforms.uFocus.value = 1
+    renderRef.current.uniforms.uFov.value = 1
+    renderRef.current.uniforms.uBlur.value = 1
     simRef.current.uniforms.uTime.value = state.clock.elapsedTime * speed
-    simRef.current.uniforms.uCurlFreq.value = THREE.MathUtils.lerp(simRef.current.uniforms.uCurlFreq.value, curl, 0.1)
+    simRef.current.uniforms.uCurlFreq.value = 1
   })
   return (
     <>
