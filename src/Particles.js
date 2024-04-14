@@ -31,7 +31,7 @@ export function Particles({ speed, fov, aperture, focus, curl, size = 150, ...pr
     }
     return particles
   }, [size])
- 
+  console.log(particles)
   // Update FBO and pointcloud every frame
   useFrame((state) => {
     state.gl.setRenderTarget(target)
@@ -43,6 +43,9 @@ export function Particles({ speed, fov, aperture, focus, curl, size = 150, ...pr
     renderRef.current.uniforms.uFocus.value = 1
     renderRef.current.uniforms.uFov.value = 1
     renderRef.current.uniforms.uBlur.value = 1
+      
+    renderRef.current.uniforms.mousePos.value = new THREE.Vector3(state.mouse.x,state.mouse.y,0)
+    simRef.current.uniforms.mousePos.value = new THREE.Vector3(state.mouse.x,state.mouse.y,0)
     simRef.current.uniforms.uTime.value = state.clock.elapsedTime * speed
     simRef.current.uniforms.uCurlFreq.value = 1
   })
@@ -66,6 +69,8 @@ export function Particles({ speed, fov, aperture, focus, curl, size = 150, ...pr
           <bufferAttribute attach="attributes-position" count={particles.length / 3} array={particles} itemSize={3} />
         </bufferGeometry>
       </points>
+    
+
     </>
   )
 }

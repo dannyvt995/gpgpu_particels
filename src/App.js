@@ -1,6 +1,7 @@
-import { OrbitControls, CameraShake } from '@react-three/drei'
+import { OrbitControls, CameraShake,PerspectiveCamera } from '@react-three/drei'
 import { useControls } from 'leva'
 import { Particles } from './Particles'
+import { Camera } from '@react-three/fiber'
 
 export default function App() {
   const props = useControls({
@@ -12,8 +13,8 @@ export default function App() {
   })
   return (
     <>
-      <OrbitControls makeDefault  zoomSpeed={0.1} />
-      
+      <OrbitControls   zoomSpeed={5} />
+      <PerspectiveCamera makeDefault position={[0,0,.1]} near={0.001} far={1000} />
       <Particles {...props} />
     </>
   )
