@@ -14,7 +14,7 @@ export default function App() {
   return (
     <>
       <OrbitControls   zoomSpeed={5} />
-      <PerspectiveCamera makeDefault position={[0,0,.1]} near={0.001} far={1000} />
+      <PerspectiveCamera makeDefault position={[0,0,.5]} near={0.001} far={1000} />
       <Particles {...props} />
     </>
   )

@@ -21,16 +21,18 @@ class SimulationMaterial extends THREE.ShaderMaterial {
     // const positionsTexture = new THREE.DataTexture(getSphere(150 * 150, 128), 150, 150, THREE.RGBAFormat, THREE.FloatType)
 
 
-    const aa = useGLTF('Flamingo.glb')
+    const aa = useGLTF('whale_glb.glb')
 
     // const positionsTexture = new THREE.DataTexture(aa.scene.children[0].geometry.attributes.position, 150, 150, THREE.RGBAFormat, THREE.FloatType)
     // const positionsTexture = new THREE.DataTexture(a.attributes.position, 150, 150, THREE.RGBAFormat, THREE.FloatType)
 
-
+    const cloneMesh = aa.scene.children[0].clone()
+    console.log(cloneMesh);
+    cloneMesh.rotateOnAxis(new THREE.Vector3(1.,1.,0.),.5)
     const model = new THREE.SphereGeometry(4, 100, 100);
 
-    const targetPosition = model.attributes.position;
-    console.log(targetPosition);
+    const targetPosition = cloneMesh.geometry.attributes.position
+   
 
     const width = 150;
     const height = 150;
@@ -45,10 +47,11 @@ class SimulationMaterial extends THREE.ShaderMaterial {
       const y = targetPosition.getY(i);
       const z = targetPosition.getZ(i);
 
+
       // Assign targetPosition values to data array
-      data[stride] = x / 10;
-      data[stride + 1] = y / 10;
-      data[stride + 2] = z / 10;
+      data[stride] = x / 5;
+      data[stride + 1] = y / 5;
+      data[stride + 2] = z / 5;
       data[stride + 3] = 1; // Alpha channel, set to 1 (fully opaque)
     }
     const  positionsTexture = new THREE.DataTexture(data, width, height, THREE.RGBAFormat, THREE.FloatType);
@@ -209,7 +212,7 @@ vec3 curl(float	x,	float	y,	float	z)
         vec3 tar = pos + curl( pos.x * frequency, pos.y * frequency, pos.z * frequency ) * amplitude;
 
         float d = length( pos-tar ) / maxDistance;
-       pos = mix( pos, tar, pow( d, 5. ) );
+    //   pos = mix( pos, tar, pow( d, 5. ) );
 
         
         // vec3 seg = pos - mousePos;
