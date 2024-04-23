@@ -33,23 +33,26 @@ class DofPointsMaterial extends THREE.ShaderMaterial {
         float lerpFactor = .7;
 
         vec3 pos = texture2D(positions, position.xy).xyz;
-        // Define the axis of rotation and the angle
-        vec3 axis = vec3(0.9, -0.5, 0.); // Example axis (you can change it)
-        float angle = radians(70.0);      // Example angle in degrees (you can change it)
-    
-        // Get the rotation matrix
+        // rotation func
+        vec3 axis = vec3(0.9, -0.5, 0.); 
+        float angle = radians(70.0);     
+        // Get rotation mat
         mat4 rotationMatrix = rotation3d(axis, angle);
     
-        // Apply the rotation to the pos vector
-        pos = (rotationMatrix * vec4(pos, 1.0)).xyz;
+        // Apply mat rot
+      //  pos = (rotationMatrix * vec4(pos, 1.0)).xyz;
+
+
         float distCalc = distance(vec2(mousePos.x,mousePos.y),vec2(0.,0.));
         float dist = min(distance(pos, vec3(mousePos.x,mousePos.y,0.)), .05);
+
+        
       //  dist =  sin(pow(dist,1.0));
      // dist = sin(dist*dist);
         if(dist > 0.001) {
-          pos.x = lerp(pos.x,(pos.x / pow(dist,0.3)), lerpFactor);
-          pos.y = lerp(pos.y,(pos.y / pow(dist,0.3)), lerpFactor);
-          pos.z = lerp(pos.z,(pos.z / pow(dist,0.3)), lerpFactor);
+          //pos.x = lerp(pos.x,(pos.x / pow(dist,0.3)), lerpFactor);
+          // pos.y = lerp(pos.y,(pos.y / pow(dist,0.3)), lerpFactor);
+          //pos.z = lerp(pos.z,(pos.z / pow(dist,0.3)), lerpFactor);
         }
      
         

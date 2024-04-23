@@ -28,7 +28,7 @@ class SimulationMaterial extends THREE.ShaderMaterial {
 
     const cloneMesh = aa.scene.children[0].clone()
     console.log(cloneMesh);
-    cloneMesh.rotateOnAxis(new THREE.Vector3(1.,1.,0.),.5)
+   // cloneMesh.rotateOnAxis(new THREE.Vector3(1.,1.,0.),.5)
     const model = new THREE.SphereGeometry(4, 100, 100);
 
     const targetPosition = cloneMesh.geometry.attributes.position
@@ -193,7 +193,19 @@ vec3 curl(float	x,	float	y,	float	z)
   return	curl;
 }
 
+mat4 rotation3d(vec3 axis, float angle) {
+  axis = normalize(axis);
+  float s = sin(angle);
+  float c = cos(angle);
+  float oc = 1.0 - c;
 
+  return mat4(
+    oc * axis.x * axis.x + c,           oc * axis.x * axis.y - axis.z * s,  oc * axis.z * axis.x + axis.y * s,  0.0,
+    oc * axis.x * axis.y + axis.z * s,  oc * axis.y * axis.y + c,           oc * axis.y * axis.z - axis.x * s,  0.0,
+    oc * axis.z * axis.x - axis.y * s,  oc * axis.y * axis.z + axis.x * s,  oc * axis.z * axis.z + c,           0.0,
+    0.0,                                0.0,                                0.0,                                1.0
+  );
+}
 
       void main() {
         float t = uTime * 0.00015;
@@ -206,22 +218,32 @@ vec3 curl(float	x,	float	y,	float	z)
         // // curlPos += curl(curlPos * uCurlFreq * 8.0) * 0.125;
         // // curlPos += curl(pos * uCurlFreq * 16.0) * 0.0625;
 
+
+
+
+        vec3 axis = vec3(.2,.2,.2); 
+        float angle = radians(70.0 + uTime/5.);     
+        // Get rotation mat
+        mat4 rotationMatrix = rotation3d(axis, angle);
+    
+        // Apply mat rot
+        pos = (rotationMatrix * vec4(pos, 1.0)).xyz;
+
+
         float frequency = 1.8;
         float amplitude = .5;
         float maxDistance = 1.;
         vec3 tar = pos + curl( pos.x * frequency, pos.y * frequency, pos.z * frequency ) * amplitude;
 
         float d = length( pos-tar ) / maxDistance;
-    //   pos = mix( pos, tar, pow( d, 5. ) );
+        // pos = mix( pos, tar, pow( d, 5. ) );
 
-        
-        // vec3 seg = pos - mousePos;
-        // vec3 dir = normalize(seg);
-        // float dist = length(seg);
-        // if (dist < .2){
-        //   float force = clamp(2. / (dist * dist), 0., 1.);
-        //   pos += dir * force;
-        // }
+        float dsMouse =  min(distance(pos, vec3(mousePos.x,mousePos.y,0.)), .05);
+         if(dsMouse < 0.1) {
+          pos.x =  mix(pos.x,1.,dsMouse);
+         }
+       
+
 
         gl_FragColor = vec4(pos, 1.0);
         
