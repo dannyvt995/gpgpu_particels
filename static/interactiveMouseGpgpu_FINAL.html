@@ -6,11 +6,16 @@
 		<meta charset="utf-8">
 		<meta name="viewport"
 			content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
-		<link type="text/css" rel="stylesheet" href="main.css">
+
 		<style>
 		body {
 			background-color: #fff;
 			color: #444;
+			margin:0;
+			padding:0;
+			width: 100vw;
+			height: 100vh;
+			overflow: hidden;
 		}
 
 		a {
@@ -46,7 +51,7 @@
 					length( velocity.xz ) * delta * 3. +
 					max( velocity.y, 0.0 ) * delta * 6. ), 62.83 );
 
-				gl_FragColor = vec4( position + velocity * delta * 15. , phase );
+				gl_FragColor = vec4( position + velocity * delta * 5. , phase );
 
 			}
 
@@ -331,11 +336,12 @@
 
 		import Stats from 'three/addons/stats.module.js';
 		import { GUI } from 'three/addons/lil-gui.module.min.js';
+		import { OrbitControls } from 'three/addons/OrbitControls.js';
 
 		import { GPUComputationRenderer } from 'three/addons/GPUComputationRenderer.js';
-
+		import { InstancesMaterial, INSTANCE_POSITION, InstancesDepthMaterial } from './instances_material.js';
 		/* TEXTURE WIDTH FOR SIMULATION */
-		const WIDTH = 50;
+		const WIDTH = 10;
 
 		const BIRDS = WIDTH * WIDTH;
 
@@ -351,8 +357,9 @@
 				let indices = []
 				
 				const b = new THREE.BoxGeometry(1, 1, 1);
-				const bPos = b.attributes.position.array
-				console.log(b.attributes.normal.array.toString())
+				const pPos = b.attributes.position.array
+				const nPos = b.attributes.position.array
+
 				const trianglesPerBird = 12;
 				const triangles = BIRDS * trianglesPerBird;
 				const points = triangles * 3;
@@ -369,49 +376,18 @@
 				console.log(vertices.count, references.count)
 			
 				function verts_push() {
-					for (let i = 0; i < arguments.length; i++) {
-						vertices.array[v++] = arguments[i];
+					for (let i = 0; i < pPos.length; i++) {
+						vertices.array[v++] = pPos[i];
 					}
 				}
 
-				function normal_push() {
-					for (let i = 0; i < arguments.length; i++) {
-						normal.array[v++] = arguments[i];
-					}
-				}
-
-				const wingsSpan = 20;
-				// for (let e = 0; e < BIRDS; e++) {
-				// 	normal_push(
-				// 		1,0,0,1,0,0,1,0,0,1,0,0,-1,0,0,-1,0,0,-1,0,0,-1,0,0,0,1,0,0,1,0,0,1,0,0,1,0,0,-1,0,0,-1,0,0,-1,0,0,-1,0,0,0,1,0,0,1,0,0,1,0,0,1,0,0,-1,0,0,-1,0,0,-1,0,0,-1
-				// 	)
-					
+				// function normal_push() {
+				// 	for (let i = 0; i < arguments.length; i++) {
+				// 		normal.array[v++] = arguments[i];
+				// 	}
 				// }
+
 				for (let f = 0; f < BIRDS; f++) {
-					// Body
-					console.log(`Base this :::: ${v}`)
-					/*         verts_push(
-								0, - 0, - 20,
-								0, 4, - 20,
-								0, 0, 30
-							); */
-
-					// Wings
-
-					// verts_push(
-					//     0, 0, - 15,
-					//     - 20, 0, 0,
-					//     0, 0, 15,
-					//     //
-					//     0, 0, 15,
-					//     20, 0, 0,
-					//     0, 0, - 15,
-					//     //
-					//     - 20, 0, 0,
-					//     0, 15, 0,
-					//     0, 0, 15
-					// );
-
 					// verts_push(
 					// 	// Front face
 					// 	0.5, 0.5, 0.5,
@@ -467,18 +443,9 @@
 					// 	-0.5, -0.5, -0.5,
 					// 	-0.5, 0.5, -0.5
 					// );
-					verts_push(
-						0.5,0.5,0.5,0.5,0.5,-0.5,0.5,-0.5,0.5,0.5,-0.5,-0.5,-0.5,0.5,-0.5,-0.5,0.5,0.5,-0.5,-0.5,-0.5,-0.5,-0.5,0.5,-0.5,0.5,-0.5,0.5,0.5,-0.5,-0.5,0.5,0.5,0.5,0.5,0.5,-0.5,-0.5,0.5,0.5,-0.5,0.5,-0.5,-0.5,-0.5,0.5,-0.5,-0.5,-0.5,0.5,0.5,0.5,0.5,0.5,-0.5,-0.5,0.5,0.5,-0.5,0.5,0.5,0.5,-0.5,-0.5,0.5,-0.5,0.5,-0.5,-0.5,-0.5,-0.5,-0.5
-					)
-					
-					// verts_push(
-					//     0,1.5,
-					//     0,0,1.5,
-					//     0,0,-1.5,
-
-					//     5,-1.2246467996456087e-15,-1.5,5,0,-1.5,0,0,-1.5,5,-1.2246467996456087e-15,-1.5,5
-					// )
-
+				
+					verts_push()
+	
 				}
 
 		
@@ -496,22 +463,22 @@
 
 
 				}
+				//Đối với các kiểu sắn xếp triganle ko tuần tự , thì tính indices , còn tuần tự thì khỏi
+				//
 				for ( let i = 0; i < b.index.array.length * BIRDS; i ++ ) {
-
-				const offset = Math.floor( i / b.index.array.length ) * ( b.getAttribute( 'position' ).count );
-				indices.push( b.index.array[ i % b.index.array.length ] + offset );
-
+					const offset = Math.floor( i / b.index.array.length ) * ( b.getAttribute( 'position' ).count );
+					indices.push( b.index.array[ i % b.index.array.length ] + offset );
 				}
 				this.setIndex( indices );
-				this.scale(10,10,10);
+				this.scale(50,50,50);
+
+				saverefence = references
 
 			}
 
 		}
 
 
-
-		//
 
 		let container, stats;
 		let camera, scene, renderer;
@@ -536,6 +503,10 @@
 		let meshDemo
 		let materialShader
 		let pointLightMNouse
+		let groundMesh
+		let materialInstanceCustom2
+		let saverefence
+		
 		init();
 		animate();
 
@@ -545,23 +516,46 @@
 			document.body.appendChild(container);
 
 			camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 3000);
-			camera.position.z = 350;
-
+			camera.position.z = 500;
+			camera.position.y = 250
 			scene = new THREE.Scene();
 			// 	scene.background = new THREE.Color(0xffffff);
 			 //scene.fog = new THREE.Fog( 0xffffff, 100, 1000 );
-			const directionalLight = new THREE.DirectionalLight(0xffffff, 50.5);
-			directionalLight.position.set( 0, 100, 0 );
-//scene.add(directionalLight);
-pointLightMNouse = new THREE.PointLight( 0xffffff, 100000, 500 );
-pointLightMNouse.position.set( 0, 0, 0 );
 
-scene.add( pointLightMNouse );
-const AmbientLight = new THREE.AmbientLight( 0x404040 ); // soft white light
-scene.add( AmbientLight );
+
+		
+			 const axesHelper = new THREE.AxesHelper( window.innerHeight );
+scene.add( axesHelper );
+
+
+			const directionalLight = new THREE.DirectionalLight(0xffffff, Math.PI * 5)
+			directionalLight.position.set( 0, window.innerHeight/2, 0 );
+			directionalLight.castShadow = true
+			directionalLight.shadow.mapSize.width = 300
+			directionalLight.shadow.mapSize.height = 300
+			directionalLight.shadow.camera.near = 0.5
+			directionalLight.shadow.camera.far = 1000
+			directionalLight.shadow.camera.left = -1000
+			directionalLight.shadow.camera.right = 1000
+			directionalLight.shadow.camera.top = 1000
+			directionalLight.shadow.camera.bottom = -1000
+			scene.add(directionalLight);
+			const helper = new THREE.DirectionalLightHelper( directionalLight, 20 );
+//scene.add( helper );
+			pointLightMNouse = new THREE.PointLight( 0xc61a09, 700000, 700 );
+			pointLightMNouse.position.set( 0, 0, 0 );
+			//pointLightMNouse.castShadow = true; 
+			scene.add( pointLightMNouse );
+
+
 			renderer = new THREE.WebGLRenderer();
 			renderer.setPixelRatio(window.devicePixelRatio);
 			renderer.setSize(window.innerWidth, window.innerHeight);
+			renderer.shadowMap.enabled = true
+
+			renderer.shadowMap.type = THREE.PCFSoftShadowMap
+			//renderer.shadowMap.type = THREE.VSMShadowMap
+
 			container.appendChild(renderer.domElement);
 
 			initComputeRenderer();
@@ -573,7 +567,7 @@ scene.add( AmbientLight );
 			container.addEventListener('pointermove', onPointerMove);
 
 			//
-
+			const controls = new OrbitControls( camera, renderer.domElement );
 			// add monitor
 			monitorPos = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.MeshBasicMaterial({ map: null }))
 			scene.add(monitorPos)
@@ -688,15 +682,15 @@ scene.add( AmbientLight );
 				//wireframe:true,
 
 			});
-			const m = new THREE.MeshStandardMaterial( {
-					vertexColors: true,
+			const materialCustom = new THREE.MeshStandardMaterial( {
+					vertexColors: false,
 					flatShading: true,
 					roughness: .5,
 					metalness: .5,
 					color: 0x00000
 				} );
-
-				m.onBeforeCompile = ( shader ) => {
+				materialCustom.light = true
+				materialCustom.onBeforeCompile = ( shader ) => {
 
 					shader.uniforms.texturePosition = { value: null };
 					shader.uniforms.textureVelocity = { value: null };
@@ -768,27 +762,110 @@ scene.add( AmbientLight );
 					materialShader = shader;
 
 				};
-			const birdMesh = new THREE.Mesh(geometry, m);
+			const birdMesh = new THREE.Mesh(geometry, materialCustom);
+			// calc normal base vertices 
 			birdMesh.geometry.computeVertexNormals()
-		
+
 			birdMesh.rotation.y = Math.PI / 2;
 			birdMesh.matrixAutoUpdate = false;
 			birdMesh.updateMatrix();
 
-			birdMesh.receiveShadow = true
-			birdMesh.castShadow = true
-			console.log( birdMesh)
-		
-			meshDemo = 	new THREE.Mesh(new THREE.BoxGeometry(10, 10, 10),
-					new THREE.MeshLambertMaterial({
-						color:0x049ef4,
-					}))
-					meshDemo.rotation.x = 20
-					meshDemo.rotation.y = 20
-			scene.add(
-				meshDemo
+		/* 	birdMesh.customDepthMaterial = new THREE.MeshDepthMaterial( {
+			depthPacking: THREE.RGBADepthPacking,
+		} );
+			birdMesh.receiveShadow = true;
+			birdMesh.castShadow = true */
+
+			function makeInstancedCubes() {
+    let cubeGeo = new THREE.BoxGeometry(20, 20, 20);
+	const materialHookInstacned = new InstancesMaterial({ color: 0x1e90ff });
+	const matInstancedCustom = new THREE.MeshStandardMaterial( {
+					vertexColors: false,
+					flatShading: true,
+					roughness: .5,
+					metalness: .5,
+					color: 0x00000
+				} );
+			
+				matInstancedCustom.onBeforeCompile = ( shader ) => {
+					shader.uniforms.texturePosition = { value: null };
+					shader.uniforms.textureVelocity = { value: null };
+					shader.uniforms.time = { value: 1.0 };
+					shader.uniforms.delta = { value: 0.0 };
+					let token = '#define STANDARD';
+
+					let insert = /* glsl */`
+						attribute vec3 customPosition;
+						attribute vec2 reference;
+
+						uniform sampler2D texturePosition;
+						uniform sampler2D textureVelocity;
+
+						uniform float time;
+					`;
+
+					shader.vertexShader = shader.vertexShader.replace( token, token + insert );
+
+					token = '#include <begin_vertex>';
+
+					insert = /* glsl */`
+						vec3 newPosition = position + customPosition;
+					
+						vec3 transformed = vec3( newPosition );
+					`;
+
+					shader.vertexShader = shader.vertexShader.replace( token, insert );
+
+					materialInstanceCustom2 = shader;
+
+				};
+
+
+   
+
+    const positions = new Float32Array(WIDTH *WIDTH  * 3);
+    for (let i = 0; i < positions.length; i += 3) {
+        positions[i] = Math.random() * 700 - 100; // Random x coordinate within a range
+        positions[i + 1] = Math.random() * 700 - 100; // Random y coordinate within a range
+        positions[i + 2] = Math.random() * 700 - 100; // Random z coordinate within a range
+    }
+	
+
+    cubeGeo.setAttribute(INSTANCE_POSITION, new THREE.InstancedBufferAttribute(positions, 3));
+	// THÊM REFENCE VÀO ĐỂ ĐỌC POSTION TỪ DATATEXTURE
+	
+    let mesh = new THREE.InstancedMesh(cubeGeo, matInstancedCustom, 700);
+	mesh.customDepthMaterial = new InstancesDepthMaterial()
+	mesh.castShadow = true
+	mesh.receiveShadow = true;
+    return mesh;
+}
+
+const m3 = makeInstancedCubes();
+console.log(m3);
+scene.add(m3);
+
+
+
+
+			groundMesh = new THREE.Mesh(
+				new THREE.PlaneGeometry(window.innerWidth,window.innerWidth),
+				new THREE.MeshPhongMaterial({})
 			)
-			scene.add(birdMesh);
+	
+			groundMesh.rotateX(-Math.PI / 2)
+			groundMesh.position.y = -300
+			groundMesh.position.z = -10
+			groundMesh.receiveShadow = true
+
+			meshDemo = 	new THREE.Mesh(new THREE.BoxGeometry(100, 100, 100),
+					new THREE.MeshPhongMaterial({
+						
+					}))
+			
+			meshDemo.receiveShadow  = true
+			meshDemo.castShadow  = true
+			scene.add(birdMesh,groundMesh,meshDemo);
 
 		}
 
@@ -878,6 +955,9 @@ scene.add( AmbientLight );
 			// birdUniforms['delta'].value = delta;
 			if ( materialShader ) materialShader.uniforms[ 'time' ].value = now / 1000;
 			if ( materialShader ) materialShader.uniforms[ 'delta' ].value = delta;
+
+			if ( materialInstanceCustom2 ) materialInstanceCustom2.uniforms[ 'time' ].value = now / 1000;
+			if ( materialInstanceCustom2 ) materialInstanceCustom2.uniforms[ 'delta' ].value = delta;
 		
 			pointLightMNouse.position.x = mouseX
 			pointLightMNouse.position.y = -mouseY
@@ -890,10 +970,14 @@ scene.add( AmbientLight );
 
 			gpuCompute.compute();
 			meshDemo.rotation.x -= 0.01
+			meshDemo.rotation.y -= 0.01
 			// birdUniforms['texturePosition'].value = gpuCompute.getCurrentRenderTarget(positionVariable).texture;
 			// birdUniforms['textureVelocity'].value = gpuCompute.getCurrentRenderTarget(velocityVariable).texture;
 			if ( materialShader ) materialShader.uniforms[ 'texturePosition' ].value = gpuCompute.getCurrentRenderTarget( positionVariable ).texture;
 			if ( materialShader ) materialShader.uniforms[ 'textureVelocity' ].value = gpuCompute.getCurrentRenderTarget( velocityVariable ).texture;
+			
+			if(materialInstanceCustom2)materialInstanceCustom2.uniforms[ 'texturePosition' ].value = gpuCompute.getCurrentRenderTarget( positionVariable ).texture;
+			if ( materialInstanceCustom2 ) materialInstanceCustom2.uniforms[ 'textureVelocity' ].value = gpuCompute.getCurrentRenderTarget( velocityVariable ).texture;
 			monitorPos.material.map = gpuCompute.getCurrentRenderTarget(positionVariable).texture;
 			monitorVel.material.map = gpuCompute.getCurrentRenderTarget(velocityVariable).texture;
 			renderer.render(scene, camera);
