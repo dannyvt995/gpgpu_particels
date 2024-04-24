@@ -51,7 +51,7 @@
 					length( velocity.xz ) * delta * 3. +
 					max( velocity.y, 0.0 ) * delta * 6. ), 62.83 );
 
-				gl_FragColor = vec4( position + velocity * delta * 5. , phase );
+				gl_FragColor = vec4( position + velocity * delta * 15. , phase );
 
 			}
 
@@ -140,16 +140,16 @@
 				dist = length( dir );
 				distSquared = dist * dist;
 
-				float preyRadius = 72.0;
+				float preyRadius = 100.0;
 				float preyRadiusSq = preyRadius * preyRadius;
 
 
 				// move birds away from predator
 				if ( dist < preyRadius ) {
 
-					f = ( distSquared / preyRadiusSq - 1.0 ) * delta * 300.;
+					f = ( distSquared / preyRadiusSq - 1.0 ) * delta * 200.;
 					velocity += normalize( dir ) * f;
-					limit += 5.0;
+					limit += 15.0;
 				} else {
 				
 				}
@@ -341,7 +341,7 @@
 		import { GPUComputationRenderer } from 'three/addons/GPUComputationRenderer.js';
 		import { InstancesMaterial, INSTANCE_POSITION, InstancesDepthMaterial } from './instances_material.js';
 		/* TEXTURE WIDTH FOR SIMULATION */
-		const WIDTH = 10;
+		const WIDTH = 20;
 
 		const BIRDS = WIDTH * WIDTH;
 
@@ -388,63 +388,63 @@
 				// }
 
 				for (let f = 0; f < BIRDS; f++) {
-					// verts_push(
-					// 	// Front face
-					// 	0.5, 0.5, 0.5,
-					// 	-0.5, 0.5, 0.5,
-					// 	-0.5, -0.5, 0.5,
+					verts_push(
+						// Front face
+						0.5, 0.5, 0.5,
+						-0.5, 0.5, 0.5,
+						-0.5, -0.5, 0.5,
 
-					// 	-0.5, -0.5, 0.5,
-					// 	0.5, -0.5, 0.5,
-					// 	0.5, 0.5, 0.5,
+						-0.5, -0.5, 0.5,
+						0.5, -0.5, 0.5,
+						0.5, 0.5, 0.5,
 
-					// 	// Back face
-					// 	0.5, 0.5, -0.5,
-					// 	0.5, -0.5, -0.5,
-					// 	-0.5, -0.5, -0.5,
+						// Back face
+						0.5, 0.5, -0.5,
+						0.5, -0.5, -0.5,
+						-0.5, -0.5, -0.5,
 
-					// 	-0.5, -0.5, -0.5,
-					// 	-0.5, 0.5, -0.5,
-					// 	0.5, 0.5, -0.5,
+						-0.5, -0.5, -0.5,
+						-0.5, 0.5, -0.5,
+						0.5, 0.5, -0.5,
 
-					// 	// Top face
-					// 	0.5, 0.5, -0.5,
-					// 	-0.5, 0.5, -0.5,
-					// 	-0.5, 0.5, 0.5,
+						// Top face
+						0.5, 0.5, -0.5,
+						-0.5, 0.5, -0.5,
+						-0.5, 0.5, 0.5,
 
-					// 	-0.5, 0.5, 0.5,
-					// 	0.5, 0.5, 0.5,
-					// 	0.5, 0.5, -0.5,
+						-0.5, 0.5, 0.5,
+						0.5, 0.5, 0.5,
+						0.5, 0.5, -0.5,
 
-					// 	// Bottom face
-					// 	0.5, -0.5, -0.5,
-					// 	0.5, -0.5, 0.5,
-					// 	-0.5, -0.5, 0.5,
+						// Bottom face
+						0.5, -0.5, -0.5,
+						0.5, -0.5, 0.5,
+						-0.5, -0.5, 0.5,
 
-					// 	-0.5, -0.5, 0.5,
-					// 	-0.5, -0.5, -0.5,
-					// 	0.5, -0.5, -0.5,
+						-0.5, -0.5, 0.5,
+						-0.5, -0.5, -0.5,
+						0.5, -0.5, -0.5,
 
-					// 	// Right face
-					// 	0.5, 0.5, -0.5,
-					// 	0.5, -0.5, -0.5,
-					// 	0.5, -0.5, 0.5,
+						// Right face
+						0.5, 0.5, -0.5,
+						0.5, -0.5, -0.5,
+						0.5, -0.5, 0.5,
 
-					// 	0.5, -0.5, 0.5,
-					// 	0.5, 0.5, 0.5,
-					// 	0.5, 0.5, -0.5,
+						0.5, -0.5, 0.5,
+						0.5, 0.5, 0.5,
+						0.5, 0.5, -0.5,
 
-					// 	// Left face
-					// 	-0.5, 0.5, -0.5,
-					// 	-0.5, 0.5, 0.5,
-					// 	-0.5, -0.5, 0.5,
+						// Left face
+						-0.5, 0.5, -0.5,
+						-0.5, 0.5, 0.5,
+						-0.5, -0.5, 0.5,
 
-					// 	-0.5, -0.5, 0.5,
-					// 	-0.5, -0.5, -0.5,
-					// 	-0.5, 0.5, -0.5
-					// );
+						-0.5, -0.5, 0.5,
+						-0.5, -0.5, -0.5,
+						-0.5, 0.5, -0.5
+					);
 				
-					verts_push()
+				//	verts_push()
 	
 				}
 
@@ -470,9 +470,10 @@
 					indices.push( b.index.array[ i % b.index.array.length ] + offset );
 				}
 				this.setIndex( indices );
-				this.scale(50,50,50);
+				this.scale(10,10,20);
 
 				saverefence = references
+				console.log(references)
 
 			}
 
@@ -505,7 +506,9 @@
 		let pointLightMNouse
 		let groundMesh
 		let materialInstanceCustom2
+		let materialInstancecustomDepthMaterial
 		let saverefence
+		let mathh
 		
 		init();
 		animate();
@@ -516,11 +519,11 @@
 			document.body.appendChild(container);
 
 			camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 3000);
-			camera.position.z = 500;
-			camera.position.y = 250
+			camera.position.z = 340;
+			//camera.position.y = 250
 			scene = new THREE.Scene();
-			// 	scene.background = new THREE.Color(0xffffff);
-			 //scene.fog = new THREE.Fog( 0xffffff, 100, 1000 );
+		//scene.background = new THREE.Color(0xffffff);
+			 scene.fog = new THREE.Fog( 0x353535, 100, 1000 );
 
 
 		
@@ -528,11 +531,11 @@
 scene.add( axesHelper );
 
 
-			const directionalLight = new THREE.DirectionalLight(0xffffff, Math.PI * 5)
-			directionalLight.position.set( 0, window.innerHeight/2, 0 );
+			const directionalLight = new THREE.DirectionalLight(0xffffff, Math.PI * 1)
+			directionalLight.position.set( 0, window.innerHeight/2,  window.innerHeight/6 );
 			directionalLight.castShadow = true
-			directionalLight.shadow.mapSize.width = 300
-			directionalLight.shadow.mapSize.height = 300
+			directionalLight.shadow.mapSize.width = window.innerWidth
+			directionalLight.shadow.mapSize.height =  window.innerHeight
 			directionalLight.shadow.camera.near = 0.5
 			directionalLight.shadow.camera.far = 1000
 			directionalLight.shadow.camera.left = -1000
@@ -715,7 +718,7 @@ scene.add( axesHelper );
 					insert = /* glsl */`
 						vec4 tmpPos = texture2D( texturePosition, reference );
 						vec3 pos = tmpPos.xyz;
-						vec3 velocity = normalize(texture2D( textureVelocity, reference ).xyz);
+						vec3 velocity = normalize(texture2D( textureVelocity,reference ).xyz);
 
 						vec3 newPosition = position;
 
@@ -769,22 +772,17 @@ scene.add( axesHelper );
 			birdMesh.rotation.y = Math.PI / 2;
 			birdMesh.matrixAutoUpdate = false;
 			birdMesh.updateMatrix();
-
-		/* 	birdMesh.customDepthMaterial = new THREE.MeshDepthMaterial( {
-			depthPacking: THREE.RGBADepthPacking,
-		} );
-			birdMesh.receiveShadow = true;
-			birdMesh.castShadow = true */
+		
 
 			function makeInstancedCubes() {
-    let cubeGeo = new THREE.BoxGeometry(20, 20, 20);
-	const materialHookInstacned = new InstancesMaterial({ color: 0x1e90ff });
-	const matInstancedCustom = new THREE.MeshStandardMaterial( {
+					let cubeGeo = new THREE.BoxGeometry(10, 10, 10);
+				
+					const matInstancedCustom = new THREE.MeshStandardMaterial( {
 					vertexColors: false,
 					flatShading: true,
 					roughness: .5,
 					metalness: .5,
-					color: 0x00000
+					color: 0x00007A
 				} );
 			
 				matInstancedCustom.onBeforeCompile = ( shader ) => {
@@ -809,9 +807,42 @@ scene.add( axesHelper );
 					token = '#include <begin_vertex>';
 
 					insert = /* glsl */`
-						vec3 newPosition = position + customPosition;
-					
-						vec3 transformed = vec3( newPosition );
+						vec4 tmpPos = texture2D( texturePosition, reference );
+						vec3 pos = tmpPos.xyz;
+						vec3 velocity = normalize(texture2D( textureVelocity,reference ).xyz);
+
+						vec3 newPosition = position;
+
+						newPosition = mat3( modelMatrix ) * newPosition;
+
+
+						velocity.z *= -1.;
+						float xz = length( velocity.xz );
+						float xyz = 1.;
+						float x = sqrt( 1. - velocity.y * velocity.y );
+
+						float cosry = velocity.x / xz;
+						float sinry = velocity.z / xz;
+
+						float cosrz = x / xyz;
+						float sinrz = velocity.y / xyz;
+
+						mat3 maty =  mat3(
+							cosry, 0, -sinry,
+							0    , 1, 0     ,
+							sinry, 0, cosry
+
+						);
+
+						mat3 matz =  mat3(
+							cosrz , sinrz, 0,
+							-sinrz, cosrz, 0,
+							0     , 0    , 1
+						);
+
+						newPosition =  maty * matz * newPosition;
+						newPosition += pos;
+						vec3 transformed = vec3( newPosition);
 					`;
 
 					shader.vertexShader = shader.vertexShader.replace( token, insert );
@@ -821,46 +852,131 @@ scene.add( axesHelper );
 				};
 
 
-   
+				const matInstancedCustomForDepth = new THREE.MeshDepthMaterial({
+					depthPacking : THREE.RGBADepthPacking
+				});
+			
+				matInstancedCustomForDepth.onBeforeCompile = ( shader ) => {
+					shader.uniforms.texturePosition = { value: null };
+					shader.uniforms.textureVelocity = { value: null };
+					shader.uniforms.time = { value: 1.0 };
+					shader.uniforms.delta = { value: 0.0 };
+					let token = '';
 
-    const positions = new Float32Array(WIDTH *WIDTH  * 3);
-    for (let i = 0; i < positions.length; i += 3) {
-        positions[i] = Math.random() * 700 - 100; // Random x coordinate within a range
-        positions[i + 1] = Math.random() * 700 - 100; // Random y coordinate within a range
-        positions[i + 2] = Math.random() * 700 - 100; // Random z coordinate within a range
-    }
-	
+					let insert = /* glsl */`
+						attribute vec3 customPosition;
+						attribute vec2 reference;
 
-    cubeGeo.setAttribute(INSTANCE_POSITION, new THREE.InstancedBufferAttribute(positions, 3));
-	// THÊM REFENCE VÀO ĐỂ ĐỌC POSTION TỪ DATATEXTURE
-	
-    let mesh = new THREE.InstancedMesh(cubeGeo, matInstancedCustom, 700);
-	mesh.customDepthMaterial = new InstancesDepthMaterial()
-	mesh.castShadow = true
-	mesh.receiveShadow = true;
-    return mesh;
-}
+						uniform sampler2D texturePosition;
+						uniform sampler2D textureVelocity;
 
-const m3 = makeInstancedCubes();
-console.log(m3);
-scene.add(m3);
+						uniform float time;
+					`;
+
+					shader.vertexShader = shader.vertexShader.replace( token, token + insert );
+
+					token = '#include <begin_vertex>';
+
+					insert = /* glsl */`
+						vec4 tmpPos = texture2D( texturePosition, reference );
+						vec3 pos = tmpPos.xyz;
+						vec3 velocity = normalize(texture2D( textureVelocity,reference ).xyz);
+
+						vec3 newPosition = position;
+
+						newPosition = mat3( modelMatrix ) * newPosition;
+
+
+						velocity.z *= -1.;
+						float xz = length( velocity.xz );
+						float xyz = 1.;
+						float x = sqrt( 1. - velocity.y * velocity.y );
+
+						float cosry = velocity.x / xz;
+						float sinry = velocity.z / xz;
+
+						float cosrz = x / xyz;
+						float sinrz = velocity.y / xyz;
+
+						mat3 maty =  mat3(
+							cosry, 0, -sinry,
+							0    , 1, 0     ,
+							sinry, 0, cosry
+
+						);
+
+						mat3 matz =  mat3(
+							cosrz , sinrz, 0,
+							-sinrz, cosrz, 0,
+							0     , 0    , 1
+						);
+
+						newPosition =  maty * matz * newPosition;
+						newPosition += pos;
+						vec3 transformed = vec3( newPosition);
+					`;
+
+					shader.vertexShader = shader.vertexShader.replace( token, insert );
+
+					materialInstancecustomDepthMaterial = shader;
+
+				};
+				
+				const positions = new Float32Array(WIDTH *WIDTH  * 3);
+				for (let i = 0; i < positions.length; i += 3) {
+					positions[i] = Math.random() * 200 - 100; // Random x coordinate within a range
+					positions[i + 1] = Math.random() * 200 - 100; // Random y coordinate within a range
+					positions[i + 2] = Math.random() * 200 - 100; // Random z coordinate within a range
+				}
+
+
+
+				let arr = new Float32Array(WIDTH*WIDTH*3);
+					for (var i=0; i<arr.length; i++) {
+					arr[i++] = (i%WIDTH)/WIDTH;
+					arr[i++] = Math.floor(i/WIDTH)/WIDTH;
+					}
+
+				cubeGeo.setAttribute('customPosition', new THREE.InstancedBufferAttribute(positions, 3));
+				cubeGeo.setAttribute('reference', new THREE.InstancedBufferAttribute(arr, 2));
+
+				/////////////////////////////////////////////////
+				// THÊM REFENCE VÀO ĐỂ ĐỌC POSTION TỪ DATATEXTURE 
+				// for (var i=0; i<arr.length; i++) {
+				// 	arr[i++] = (i%w)/w;
+				// 	arr[i++] = Math.floor(i/w)/h;
+				// 	arr[i++] = 0;
+				// }
+				/////////////////////////////////////////////////
+				
+				let mesh = new THREE.InstancedMesh(cubeGeo, matInstancedCustom, WIDTH *WIDTH);
+				mesh.customDepthMaterial = matInstancedCustomForDepth
+		
+				mesh.castShadow = true
+				mesh.receiveShadow = true;
+				return mesh;
+			}
+
+			const m3 = makeInstancedCubes();
+			console.log(m3);
+			scene.add(m3);
 
 
 
 
 			groundMesh = new THREE.Mesh(
 				new THREE.PlaneGeometry(window.innerWidth,window.innerWidth),
-				new THREE.MeshPhongMaterial({})
+				new THREE.MeshPhongMaterial({	color:0x353535})
 			)
 	
-			groundMesh.rotateX(-Math.PI / 2)
+			groundMesh.rotateX(-Math.PI / 4.2)
 			groundMesh.position.y = -300
-			groundMesh.position.z = -10
+		
 			groundMesh.receiveShadow = true
 
-			meshDemo = 	new THREE.Mesh(new THREE.BoxGeometry(100, 100, 100),
+			meshDemo = 	new THREE.Mesh(new THREE.SphereGeometry(10, 16, 16),
 					new THREE.MeshPhongMaterial({
-						
+					
 					}))
 			
 			meshDemo.receiveShadow  = true
@@ -955,10 +1071,11 @@ scene.add(m3);
 			// birdUniforms['delta'].value = delta;
 			if ( materialShader ) materialShader.uniforms[ 'time' ].value = now / 1000;
 			if ( materialShader ) materialShader.uniforms[ 'delta' ].value = delta;
-
+			
 			if ( materialInstanceCustom2 ) materialInstanceCustom2.uniforms[ 'time' ].value = now / 1000;
 			if ( materialInstanceCustom2 ) materialInstanceCustom2.uniforms[ 'delta' ].value = delta;
-		
+			if ( materialInstancecustomDepthMaterial ) materialInstancecustomDepthMaterial.uniforms[ 'time' ].value = now / 1000;
+			if ( materialInstancecustomDepthMaterial ) materialInstancecustomDepthMaterial.uniforms[ 'delta' ].value = delta;
 			pointLightMNouse.position.x = mouseX
 			pointLightMNouse.position.y = -mouseY
 			meshDemo.position.x = mouseX
@@ -975,9 +1092,13 @@ scene.add(m3);
 			// birdUniforms['textureVelocity'].value = gpuCompute.getCurrentRenderTarget(velocityVariable).texture;
 			if ( materialShader ) materialShader.uniforms[ 'texturePosition' ].value = gpuCompute.getCurrentRenderTarget( positionVariable ).texture;
 			if ( materialShader ) materialShader.uniforms[ 'textureVelocity' ].value = gpuCompute.getCurrentRenderTarget( velocityVariable ).texture;
-			
+				
 			if(materialInstanceCustom2)materialInstanceCustom2.uniforms[ 'texturePosition' ].value = gpuCompute.getCurrentRenderTarget( positionVariable ).texture;
 			if ( materialInstanceCustom2 ) materialInstanceCustom2.uniforms[ 'textureVelocity' ].value = gpuCompute.getCurrentRenderTarget( velocityVariable ).texture;
+			if(materialInstancecustomDepthMaterial)materialInstancecustomDepthMaterial.uniforms[ 'texturePosition' ].value = gpuCompute.getCurrentRenderTarget( positionVariable ).texture;
+			if ( materialInstancecustomDepthMaterial ) materialInstancecustomDepthMaterial.uniforms[ 'textureVelocity' ].value = gpuCompute.getCurrentRenderTarget( velocityVariable ).texture;
+	
+			
 			monitorPos.material.map = gpuCompute.getCurrentRenderTarget(positionVariable).texture;
 			monitorVel.material.map = gpuCompute.getCurrentRenderTarget(velocityVariable).texture;
 			renderer.render(scene, camera);

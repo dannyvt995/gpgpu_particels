@@ -9,6 +9,11 @@ export class InstancesMaterial extends MeshStandardMaterial {
   onBeforeCompile = (shader) => {
     insertAttributesAndFunctions(shader)
     overrideLogic(shader)
+
+    shader.uniforms.texturePosition = { value: null };
+					shader.uniforms.textureVelocity = { value: null };
+					shader.uniforms.time = { value: 1.0 };
+					shader.uniforms.delta = { value: 0.0 };
   }
 
 }
