@@ -359,7 +359,8 @@
 				const b = new THREE.BoxGeometry(1, 1, 1);
 				const pPos = b.attributes.position.array
 				const nPos = b.attributes.position.array
-
+				const uvPos = b.attributes.uv.array
+				console.log(b)
 				const trianglesPerBird = 12;
 				const triangles = BIRDS * trianglesPerBird;
 				const points = triangles * 3;
@@ -367,9 +368,10 @@
 				const vertices = new THREE.BufferAttribute(new Float32Array(points * 3), 3);
 				//const normal = new THREE.BufferAttribute(new Float32Array(points * 3), 3);
 				const references = new THREE.BufferAttribute(new Float32Array(points * 2), 2);
-
+				const uv = new THREE.BufferAttribute(new Float32Array(points * 2), 2);
 				this.setAttribute('position', vertices);
 				this.setAttribute('reference', references);
+				this.setAttribute('uv', uv);
 				//this.setAttribute('normal', normal);
 	
 				console.log(`Trigs Num:${trianglesPerBird}`, `All Trigs::${triangles}`, `All point::${points}`)
@@ -377,18 +379,22 @@
 			
 				function verts_push() {
 					for (let i = 0; i < pPos.length; i++) {
+						//get thẳng
 						vertices.array[v++] = pPos[i];
 					}
 				}
 
-				// function normal_push() {
-				// 	for (let i = 0; i < arguments.length; i++) {
-				// 		normal.array[v++] = arguments[i];
-				// 	}
-				// }
+				function uv_push() {
+					for (let i = 0; i < uvPos.length; i++) {
+						uv.array[v++] = uvPos[i];
+					}
+				}
 
 				for (let f = 0; f < BIRDS; f++) {
+					uv_push()
 					verts_push(
+						// arr tuần tự , điểm kết thúc 1 triggle là điểm bắt đầu
+						// need compute normal when apply material
 						// Front face
 						0.5, 0.5, 0.5,
 						-0.5, 0.5, 0.5,
@@ -519,7 +525,7 @@
 			document.body.appendChild(container);
 
 			camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 3000);
-			camera.position.z = 340;
+			camera.position.z = 250;
 			//camera.position.y = 250
 			scene = new THREE.Scene();
 		//scene.background = new THREE.Color(0xffffff);
@@ -572,9 +578,9 @@ scene.add( axesHelper );
 			//
 			const controls = new OrbitControls( camera, renderer.domElement );
 			// add monitor
-			monitorPos = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.MeshBasicMaterial({ map: null }))
+			monitorPos = new THREE.Mesh(new THREE.PlaneGeometry(100, 100), new THREE.MeshBasicMaterial({ map: null }))
 			scene.add(monitorPos)
-			monitorVel = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.MeshBasicMaterial({ map: null }))
+			monitorVel = new THREE.Mesh(new THREE.PlaneGeometry(100, 100), new THREE.MeshBasicMaterial({ map: null }))
 			monitorVel.position.x = -300
 			monitorVel.position.y = 100
 			monitorPos.position.x = -300
@@ -703,6 +709,8 @@ scene.add( axesHelper );
 					let token = '#define STANDARD';
 
 					let insert = /* glsl */`
+						varying vec3 uPos;
+						varying vec2 vUv;
 						attribute vec2 reference;
 
 						uniform sampler2D texturePosition;
@@ -758,10 +766,25 @@ scene.add( axesHelper );
 						newPosition += vec3(pos.z,pos.y,pos.x);
 
 						vec3 transformed = vec3( newPosition );
+						uPos = transformed;
+						vUv = uv;
 					`;
 
 					shader.vertexShader = shader.vertexShader.replace( token, insert );
-
+					//fragemnt
+					token = '#define STANDARD'
+					insert = `
+						varying vec3 uPos;
+						varying vec2 vUv;
+					`
+					shader.fragmentShader = shader.fragmentShader.replace( token, insert );
+					token = '#include <dithering_fragment>'
+					insert = `
+					
+				
+						gl_FragColor = vec4(vec3(vUv,outgoingLight.x) ,1.);
+					`
+					shader.fragmentShader = shader.fragmentShader.replace( token, insert );
 					materialShader = shader;
 
 				};
@@ -793,6 +816,8 @@ scene.add( axesHelper );
 					let token = '#define STANDARD';
 
 					let insert = /* glsl */`
+						varying vec3 uPos;
+						varying vec2 vUv;
 						attribute vec3 customPosition;
 						attribute vec2 reference;
 
@@ -842,11 +867,29 @@ scene.add( axesHelper );
 
 						newPosition =  maty * matz * newPosition;
 						newPosition += pos;
-						vec3 transformed = vec3( newPosition);
+						vec3 transformed = vec3(newPosition);
+						uPos = transformed;
+						vUv = uv;
 					`;
 
 					shader.vertexShader = shader.vertexShader.replace( token, insert );
 
+
+					//fragemnt
+					token = '#define STANDARD'
+					insert = `
+						varying vec3 uPos;
+						varying vec2 vUv;
+					`
+					shader.fragmentShader = shader.fragmentShader.replace( token, insert );
+					token = '#include <dithering_fragment>'
+					insert = `
+					
+				
+						gl_FragColor = vec4(vec3(vUv,outgoingLight.x),1.);
+					`
+					shader.fragmentShader = shader.fragmentShader.replace( token, insert );
+					console.log(shader.fragmentShader)
 					materialInstanceCustom2 = shader;
 
 				};
@@ -921,7 +964,7 @@ scene.add( axesHelper );
 					materialInstancecustomDepthMaterial = shader;
 
 				};
-				
+				// testing , pos đc lấy từ texure
 				const positions = new Float32Array(WIDTH *WIDTH  * 3);
 				for (let i = 0; i < positions.length; i += 3) {
 					positions[i] = Math.random() * 200 - 100; // Random x coordinate within a range
@@ -929,16 +972,18 @@ scene.add( axesHelper );
 					positions[i + 2] = Math.random() * 200 - 100; // Random z coordinate within a range
 				}
 
+		
 
 
-				let arr = new Float32Array(WIDTH*WIDTH*3);
-					for (var i=0; i<arr.length; i++) {
-					arr[i++] = (i%WIDTH)/WIDTH;
-					arr[i++] = Math.floor(i/WIDTH)/WIDTH;
+				//
+				let referenceFloat32 = new Float32Array(WIDTH*WIDTH*3);
+					for (var i=0; i<referenceFloat32.length; i++) {
+						referenceFloat32[i++] = (i%WIDTH)/WIDTH;
+						referenceFloat32[i++] = Math.floor(i/WIDTH)/WIDTH;
 					}
 
 				cubeGeo.setAttribute('customPosition', new THREE.InstancedBufferAttribute(positions, 3));
-				cubeGeo.setAttribute('reference', new THREE.InstancedBufferAttribute(arr, 2));
+				cubeGeo.setAttribute('reference', new THREE.InstancedBufferAttribute(referenceFloat32, 2));
 
 				/////////////////////////////////////////////////
 				// THÊM REFENCE VÀO ĐỂ ĐỌC POSTION TỪ DATATEXTURE 
@@ -957,9 +1002,9 @@ scene.add( axesHelper );
 				return mesh;
 			}
 
-			const m3 = makeInstancedCubes();
-			console.log(m3);
-			scene.add(m3);
+			const InstancedMeshFinal = makeInstancedCubes();
+			console.log(`1:::::::::::::::: ${InstancedMeshFinal}`);
+			scene.add(InstancedMeshFinal);
 
 
 
@@ -976,7 +1021,7 @@ scene.add( axesHelper );
 
 			meshDemo = 	new THREE.Mesh(new THREE.SphereGeometry(10, 16, 16),
 					new THREE.MeshPhongMaterial({
-					
+						color:0xfefefe
 					}))
 			
 			meshDemo.receiveShadow  = true
@@ -1086,8 +1131,7 @@ scene.add( axesHelper );
 			// mouseY = 10000;
 
 			gpuCompute.compute();
-			meshDemo.rotation.x -= 0.01
-			meshDemo.rotation.y -= 0.01
+		
 			// birdUniforms['texturePosition'].value = gpuCompute.getCurrentRenderTarget(positionVariable).texture;
 			// birdUniforms['textureVelocity'].value = gpuCompute.getCurrentRenderTarget(velocityVariable).texture;
 			if ( materialShader ) materialShader.uniforms[ 'texturePosition' ].value = gpuCompute.getCurrentRenderTarget( positionVariable ).texture;
