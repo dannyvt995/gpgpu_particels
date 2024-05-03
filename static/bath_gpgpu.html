@@ -548,6 +548,7 @@
 		let delta
 		let listChildMeshFORBatch
 		let materialBatch
+		let customDepthMaterialBatch
 		let accessToMaterialBath
 		const api = {
 			method: 'BATCHED',
@@ -1131,7 +1132,7 @@
 		
 						vec2 refence = vec2(mod(float(batchId), textureWidth_Height.x) / textureWidth_Height.x, floor(float(batchId) / textureWidth_Height.x) / textureWidth_Height.y);
 						vec4 tmpPos = texture2D(texturePosition,refence );
-
+						vUv = uv;
 						vec3 pos = tmpPos.xyz;
 						vec3 velocity = normalize(texture2D( textureVelocity,refence).xyz);
 
@@ -1169,7 +1170,7 @@
 					//	newPosition =  maty * matz * newPosition;
 						newPosition += vec3(pos.x,pos.z,pos.y);
 						vec3 transformed = vec3( newPosition) / 100.;
-
+						
 					`;
 
 					shader.vertexShader = shader.vertexShader.replace(token, insert);
@@ -1179,12 +1180,13 @@
 					token = '#define PHONG'
 					insert = `
 						varying vec3 uPos;
+						varying vec2 vUv;
 					`
 					shader.fragmentShader = shader.fragmentShader.replace(token, insert);
 					token = '#include <dithering_fragment>'
 					insert = `
 
-						// gl_FragColor = vec4(vec3(vUv,outgoingLight.x),1.);
+						 gl_FragColor = vec4(vec3(vUv,outgoingLight.x),1.);
 
 					`
 					shader.fragmentShader = shader.fragmentShader.replace(token, insert);
@@ -1214,18 +1216,19 @@
 			const dracoLoader = new DRACOLoader();
 			dracoLoader.setDecoderPath('/jsm/draco/');
 			loader.setDRACOLoader(dracoLoader);
-			loader.load('egg-full.gltf', async function (gltf) {
+			loader.load('sample.gltf', async function (gltf) {
 
 				const model = gltf.scene;
 
 				// wait until the model can be added to the scene without blocking due to shader compilation
 
 				//  await renderer.compileAsync(model, camera, scene);
-				console.log(model)
+			
 				model.position.x = -1
 				scene.add(model)
 				saveModel = model
-				listChildMeshFORBatch = saveModel.children[0].children[1].children
+				listChildMeshFORBatch = saveModel.children
+					console.log(listChildMeshFORBatch)
 				for (let i = 0; i < geometryCount; i++) {
 					if (listChildMeshFORBatch[i].type !== 'Group') {
 						savegeomestry.push(listChildMeshFORBatch[i].geometry); 
@@ -1279,76 +1282,92 @@
 				console.log(mesh)
 				mesh.scale.set(100, 100, 100)
 			
-				// const matInstancedCustomForDepth = new THREE.MeshDepthMaterial({
-				// 	depthPacking: THREE.RGBADepthPacking
-				// });
+				const maBathCustomForDepth = new THREE.MeshDepthMaterial({
+					depthPacking: THREE.RGBADepthPacking
+				});
 
-				// matInstancedCustomForDepth.onBeforeCompile = (shader) => {
-				// 	shader.uniforms.texturePosition = { value: null };
-				// 	shader.uniforms.textureVelocity = { value: null };
-				// 	shader.uniforms.time = { value: 1.0 };
-				// 	shader.uniforms.delta = { value: 0.0 };
-				// 	let token = '';
+				maBathCustomForDepth.onBeforeCompile = (shader) => {
+					shader.uniforms.texturePosition = { value: null };
+					shader.uniforms.textureVelocity = { value: null };
+					shader.uniforms.time = { value: 1.0 };
+					shader.uniforms.delta = { value: 0.0 };
+					let token = '';
 
-				// 	let insert = /* glsl */`
+					let insert = /* glsl */`
 
-				// 		uniform sampler2D texturePosition;
-				// 		uniform sampler2D textureVelocity;
+						uniform sampler2D texturePosition;
+						uniform sampler2D textureVelocity;
 
-				// 		uniform float time;
-				// 	`;
+						uniform float time;
+					`;
 
-				// 	shader.vertexShader = shader.vertexShader.replace(token, token + insert);
+					shader.vertexShader = shader.vertexShader.replace(token, token + insert);
 
-				// 	token = '#include <begin_vertex>';
+					token = '#include <begin_vertex>';
 
-				// 	insert = /* glsl */`
-				// 	vec4 tmpPos = texture2D(texturePosition, vec2(mod(float(batchId), 20.0) / 20.0, (float(batchId) / 20.0) / 20.0));
-				// 		vec3 pos = tmpPos.xyz;
-				// 		vec3 velocity = normalize(texture2D( textureVelocity,vec2(mod(float(batchId), 20.0) / 20.0, (float(batchId) / 20.0) / 20.0) ).xyz);
+					insert = /* glsl */`
+						vec4 tmpPos = texture2D(texturePosition, vec2(mod(float(batchId), 20.0) / 20.0, (float(batchId) / 20.0) / 20.0));
+						vec3 pos = tmpPos.xyz;
+						vec3 velocity = normalize(texture2D( textureVelocity,vec2(mod(float(batchId), 20.0) / 20.0, (float(batchId) / 20.0) / 20.0) ).xyz);
 
-				// 		vec3 newPosition = position;
+						vec3 newPosition = position;
 
-				// 		newPosition = mat3( modelMatrix ) * newPosition;
+						newPosition = mat3( modelMatrix ) * newPosition;
 
 
-				// 		velocity.z *= -1.;
-				// 		float xz = length( velocity.xz );
-				// 		float xyz = 1.;
-				// 		float x = sqrt( 1. - velocity.y * velocity.y );
+						velocity.z *= -1.;
+						float xz = length( velocity.xz );
+						float xyz = 1.;
+						float x = sqrt( 1. - velocity.y * velocity.y );
 
-				// 		float cosry = velocity.x / xz;
-				// 		float sinry = velocity.z / xz;
+						float cosry = velocity.x / xz;
+						float sinry = velocity.z / xz;
 
-				// 		float cosrz = x / xyz;
-				// 		float sinrz = velocity.y / xyz;
+						float cosrz = x / xyz;
+						float sinrz = velocity.y / xyz;
 
-				// 		mat3 maty =  mat3(
-				// 			cosry, 0, -sinry,
-				// 			0    , 1, 0     ,
-				// 			sinry, 0, cosry
+						mat3 maty =  mat3(
+							cosry, 0, -sinry,
+							0    , 1, 0     ,
+							sinry, 0, cosry
 
-				// 		);
+						);
 
-				// 		mat3 matz =  mat3(
-				// 			cosrz , sinrz, 0,
-				// 			-sinrz, cosrz, 0,
-				// 			0     , 0    , 1
-				// 		);
+						mat3 matz =  mat3(
+							cosrz , sinrz, 0,
+							-sinrz, cosrz, 0,
+							0     , 0    , 1
+						);
 
-				// 		//newPosition =  maty * matz * newPosition;
-				// 		newPosition += pos;
-				// 		vec3 transformed = vec3( newPosition);
-				// 	`;
+						//newPosition =  maty * matz * newPosition;
+						newPosition += pos;
+						vec3 transformed = vec3( newPosition) / 100.;
+					`;
 
-				// 	shader.vertexShader = shader.vertexShader.replace(token, insert);
+					shader.vertexShader = shader.vertexShader.replace(token, insert);
 
-				// 	materialInstancecustomDepthMaterial = shader;
 
-				// };
+
+					//fRGAMENT
+					token = '#define PHONG'
+					insert = `
+						varying vec3 uPos;
+					`
+					shader.fragmentShader = shader.fragmentShader.replace(token, insert);
+					token = '#include <dithering_fragment>'
+					insert = `
+
+						// gl_FragColor = vec4(vec3(vUv,outgoingLight.x),1.);
+
+					`
+					shader.fragmentShader = shader.fragmentShader.replace(token, insert);
+
+					customDepthMaterialBatch = shader;
+
+				};
 				
 				
-				// mesh.customDepthMaterial = matInstancedCustomForDepth
+				mesh.customDepthMaterial = maBathCustomForDepth
 				mesh.receiveShadow = true
 				mesh.castShadow = true
 				scene.add(mesh);
@@ -1461,6 +1480,10 @@
 
 			if (materialInstanceCustom2) materialInstanceCustom2.uniforms['time'].value = now / 1000;
 			if (materialInstanceCustom2) materialInstanceCustom2.uniforms['delta'].value = delta;
+			
+
+			if (customDepthMaterialBatch) customDepthMaterialBatch.uniforms['time'].value = now / 1000;
+			if (customDepthMaterialBatch) customDepthMaterialBatch.uniforms['delta'].value = delta;
 			if (materialInstancecustomDepthMaterial) materialInstancecustomDepthMaterial.uniforms['time'].value = now / 1000;
 			if (materialInstancecustomDepthMaterial) materialInstancecustomDepthMaterial.uniforms['delta'].value = delta;
 			pointLightMNouse.position.x = mouseX
@@ -1490,8 +1513,9 @@
 			if (materialInstanceCustom2) materialInstanceCustom2.uniforms['textureVelocity'].value = gpuCompute.getCurrentRenderTarget(velocityVariable).texture;
 			if (materialInstancecustomDepthMaterial) materialInstancecustomDepthMaterial.uniforms['texturePosition'].value = gpuCompute.getCurrentRenderTarget(positionVariable).texture;
 			if (materialInstancecustomDepthMaterial) materialInstancecustomDepthMaterial.uniforms['textureVelocity'].value = gpuCompute.getCurrentRenderTarget(velocityVariable).texture;
-
-
+			if (customDepthMaterialBatch) customDepthMaterialBatch.uniforms['texturePosition'].value = gpuCompute.getCurrentRenderTarget(positionVariable).texture;
+			if (customDepthMaterialBatch) customDepthMaterialBatch.uniforms['textureVelocity'].value = gpuCompute.getCurrentRenderTarget(velocityVariable).texture;
+			
 			monitorPos.material.map = gpuCompute.getCurrentRenderTarget(positionVariable).texture;
 			monitorVel.material.map = gpuCompute.getCurrentRenderTarget(velocityVariable).texture;
 			renderer.render(scene, camera);
