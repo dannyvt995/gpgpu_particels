@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <title>three.js webgl - mesh - batch</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+
+
+</head>
+
+<style>
+    body {
+        background-color: #fff;
+        color: #444;
+        margin: 0;
+        padding: 0;
+        width: 100vw;
+        height: 100vh;
+        overflow: hidden;
+    }
+
+    a {
+        color: #08f;
+    }
+</style>
+
+<body>
+
+    <p>https://codesandbox.io/p/sandbox/three-js-instanced-skinned-mesh-2yfgiu?file=%2Findex.html%3A22%2C1</p>
+    <script type="importmap">
+		{
+			"imports": {
+				"three": "./three.module.js",
+				"three/addons/": "./jsm/"
+			}
+		}
+	</script>
+
+    <script type="module">
+        import * as THREE from 'three';
+
+        import Stats from 'three/addons/stats.module.js';
+        import { GUI } from 'three/addons/lil-gui.module.min.js';
+        import { GLTFLoader } from 'three/addons/GLTFLoader.js';
+        import { DRACOLoader } from 'three/addons/DRACOLoader.js';
+        import { OrbitControls } from 'three/addons/OrbitControls.js';
+        import { radixSort } from 'three/addons/SortUtils.js';
+
+        let stats, gui, guiStatsEl, mixer;
+        let camera, controls, scene, renderer;
+        let geometries, mesh, material;
+        const clock = new THREE.Clock();
+
+
+        init();
+        initMesh();
+        animate();
+        function initPoint(pos) {
+
+
+            const positions = pos;
+            const count = positions.length / 3; // Số lượng điểm vị trí
+
+
+            // Tạo buffer geometry cho điểm
+            const pointGeometry = new THREE.BufferGeometry();
+            pointGeometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+            const vertexShader = `
+                void main() {
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                    gl_PointSize = 1.0; // Adjust point size
+                }
+            `;
+
+            // Define fragment shader
+            const fragmentShader = `
+                void main() {
+                    gl_FragColor = vec4(1., .5, .5, 1.0); // Green color
+                }
+            `;
+
+            // Create shader material
+            const shaderMaterial = new THREE.ShaderMaterial({
+                vertexShader: vertexShader,
+                fragmentShader: fragmentShader,
+                transparent: true
+            });
+
+            // Create Points mesh with custom shader material
+            const points = new THREE.Points(pointGeometry, shaderMaterial);
+            scene.add(points);
+            console.log("Final  object:", shaderMaterial);
+            scene.add(model);
+
+        }
+        function showTexture(texture) {
+            const material = new THREE.MeshBasicMaterial({ map: texture });
+
+            // Create a geometry for your mesh (e.g., a plane)
+            const geometry = new THREE.PlaneGeometry(7, 7); // Example plane geometry
+
+            // Create the mesh and apply the material
+            const mesh = new THREE.Mesh(geometry, material);
+            mesh.position.x = 10
+            // Add the mesh to the scene
+            scene.add(mesh);
+        }
+        function initMesh() {
+
+            const loader = new GLTFLoader().setPath("models/");
+            const dracoLoader = new DRACOLoader();
+            dracoLoader.setDecoderPath('/jsm/draco/');
+            loader.setDRACOLoader(dracoLoader);
+            loader.load('dragon.gltf', async function (gltf) {
+
+                const model = gltf.scene;
+                model.position.set(0, 0, 0)
+                let targetObject = null;
+                model.traverse(function (child) {
+                    if (child.name === "GLTF_created_0") {
+                        targetObject = child;
+                        child.children[1].material.wireframe = true
+                        child.children[0].visible = false
+                        child.children[2].visible = false
+                    }
+                });
+
+                console.log("This all:", gltf.scenes[0]);
+                console.log("This animations:", gltf.animations[0]);
+                console.log("Found object:", targetObject);
+
+                mixer = new THREE.AnimationMixer(model);
+                const action = mixer.clipAction(gltf.animations[0]);
+                action.play();
+                action.paused = false;
+
+
+                scene.add(model)
+
+
+                
+                let skinnedMesh = targetObject.children[1]
+                const points = new THREE.Points(skinnedMesh.geometry, new THREE.MeshStandardMaterial({
+                    skinning: true,
+                    color: 0x00000
+                }));
+               
+
+                points.matrixWorld.copy(skinnedMesh.matrixWorld);
+
+                points.skeleton = skinnedMesh.skeleton;
+                points.bindMatrix = skinnedMesh.bindMatrix;
+                points.bindMatrixInverse = skinnedMesh.bindMatrixInverse;
+                points.bindMode = skinnedMesh.bindMode;
+                // points.drawMode = skinnedMesh.drawMode;
+                points.name = skinnedMesh.name;
+                points.parent = skinnedMesh.parent;
+                points.uuid = skinnedMesh.uuid;
+                points.type = skinnedMesh.type;
+
+                points.isSkinnedMesh = true;
+                points.bind = skinnedMesh.bind;
+                points.clone = skinnedMesh.clone;
+                points.initBones = skinnedMesh.initBones;
+                points.normalizeSkinWeights = skinnedMesh.normalizeSkinWeights;
+                points.pose = skinnedMesh.pose;
+                console.log(points)
+                scene.add(points)
+              //  initPoint(targetObject.children[1].geometry.attributes.position.array)
+
+            });
+
+
+
+
+        }
+
+        function init() {
+
+            const width = window.innerWidth;
+            const height = window.innerHeight;
+
+            // camera
+
+            camera = new THREE.PerspectiveCamera(70, width / height, 1, 100);
+            camera.position.z = 10;
+
+            // renderer
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(width, height);
+            document.body.appendChild(renderer.domElement);
+
+            // scene
+
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xffffff);
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
+            // scene.add(directionalLight);
+            // controls
+
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.autoRotate = true;
+            controls.autoRotateSpeed = 1.0;
+
+            // stats
+
+            stats = new Stats();
+            document.body.appendChild(stats.dom);
+
+            // listeners
+
+            window.addEventListener('resize', onWindowResize);
+
+        }
+
+
+
+
+        function onWindowResize() {
+
+            const width = window.innerWidth;
+            const height = window.innerHeight;
+
+            camera.aspect = width / height;
+            camera.updateProjectionMatrix();
+
+            renderer.setSize(width, height);
+
+        }
+
+        function animate() {
+
+            requestAnimationFrame(animate);
+
+
+            //controls.update();
+            stats.update();
+
+            render();
+
+        }
+
+
+        function render() {
+            const delta = clock.getDelta();
+            if(mixer) mixer.update(delta);
+
+            renderer.render(scene, camera);
+
+        }
+
+    </script>
+
+</body>
+
+</html>
+
+
