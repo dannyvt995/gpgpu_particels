@@ -51,14 +51,8 @@
         let camera, controls, scene, renderer;
         let geometries, mesh, material;
         let saveMat, saveGeo, dataColection
-
-        let textureFBO
-
-
+        let renderBufferA, renderBufferB, postFXScene, postFXMesh
         const clock = new THREE.Clock();
-
-
-
         //for skined static
         const bindMatrixSTATIC = new THREE.Matrix4();
         bindMatrixSTATIC.set(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1);
@@ -69,7 +63,7 @@
 
         initMesh();
         animate();
-        showTexture()
+
         const vertFinal = `
             precision highp float;
             precision highp int;
@@ -133,12 +127,12 @@
 
         function getSkinnedPoints(skinnedMesh) {
             const points = new THREE.Points(skinnedMesh.geometry, skinnedMesh.material);
-            //SkinnedMeshSkinnedMeshSkinnedMeshSkinnedMesh
+
             points.skeleton = skinnedMesh.skeleton;
             points.bindMatrix = skinnedMesh.bindMatrix;
             points.bindMatrixInverse = skinnedMesh.bindMatrixInverse;
             points.bindMode = skinnedMesh.bindMode;
-            //points.drawMode = skinnedMesh.drawMode;
+            points.drawMode = skinnedMesh.drawMode;
             points.name = skinnedMesh.name;
             points.parent = skinnedMesh.parent;
             points.uuid = skinnedMesh.uuid;
@@ -148,14 +142,15 @@
             points.bind = skinnedMesh.bind;
             points.clone = skinnedMesh.clone;
             points.initBones = skinnedMesh.initBones;
-           // points.normalizeSkinWeights = skinnedMesh.normalizeSkinWeights;
+            points.normalizeSkinWeights = skinnedMesh.normalizeSkinWeights;
             points.pose = skinnedMesh.pose;
             points.updateMatrixWorld = skinnedMesh.updateMatrixWorld;
-            console.log("getSkinnedPoints",points)
+
             return points;
         }
 
-        function showTexture() {
+        function showTexture(mat, geo) {
+            console.log(mat, geo)
             const vertexShader = `
                 varying vec2 vUv;
                 void main() {
@@ -168,128 +163,36 @@
                 varying vec2 vUv;
                 uniform sampler2D renderTex;
                 void main() {
-                 gl_FragColor = texture2D(renderTex, vUv);
-              //   gl_FragColor = vec4(vUv,1.,1.);
+                vec4 tex = texture2D(renderTex,vUv);
+                    gl_FragColor = vec4(tex.xy,1.,1.);
                 }
             `;
 
             const shaderMaterial = new THREE.ShaderMaterial({
                 uniforms: {
-                    renderTex: { value: textureFBO }
+                    renderTex: { value: null }
                 },
                 vertexShader: vertexShader,
                 fragmentShader: fragmentShader,
-                transparent: true,
-                side: 2,
+                transparent: true
             });
-            const geometry = new THREE.PlaneGeometry(200, 200);
+            const geometry = new THREE.PlaneGeometry(200, 200, 200, 200);
+            const count = 200
+            const customAttribute = new Float32Array(count);
 
-            meshShowTexture = new THREE.Mesh(geometry, shaderMaterial);
-            meshShowTexture.position.x = 200
-            scene.add(meshShowTexture);
-
-        }
-
-
-        function initDataTexture(attr) {
-            console.log(attr)
-            const vertices = attr.position.array;
-            const numVertices = vertices.length / 3;
-
-            const size = Math.ceil(Math.sqrt(numVertices));
-            const data = new Float32Array(size * size * 3);
-
-
-            for (let i = 0; i < numVertices; i++) {
-                const stride = i * 3;
-                data[stride] = vertices[i * 3];
-                data[stride + 1] = vertices[i * 3 + 1];
-                data[stride + 2] = vertices[i * 3 + 2];
-                data[stride + 3] = 1.;
+            // Fill the custom attribute with random values
+            for (let i = 0; i < count; i++) {
+                customAttribute[i] = Math.random();
             }
 
-            textureFBO = new THREE.DataTexture(data, size, size, THREE.RGBAFormat, THREE.FloatType);
-            textureFBO.needsUpdate = true;
-
-
-            // Instanced ko dc
-            const geometry = new THREE.BufferGeometry();
-            const positions = new THREE.BufferAttribute(new Float32Array([0, 0, 0]), 3); 
-            geometry.setAttribute('position', positions);
-
-       
-            geometry.setAttribute('instancePosition', new THREE.BufferAttribute(attr.position.array, 3));
-            geometry.setAttribute('normal', new THREE.BufferAttribute(attr.normal.array, 3));
-            geometry.setAttribute('skinIndex', new THREE.BufferAttribute(attr.skinIndex.array, 4));
-            geometry.setAttribute('skinWeight', new THREE.BufferAttribute(attr.skinWeight.array, 4));
-            geometry.setAttribute('texcoord_4', new THREE.BufferAttribute(attr.texcoord_4.array, 2));
-            geometry.setAttribute('uv', new THREE.BufferAttribute(attr.uv.array, 2));
-            geometry.setAttribute('uv1', new THREE.BufferAttribute(attr.uv1.array, 2));
-            geometry.setAttribute('uv2', new THREE.BufferAttribute(attr.uv2.array, 2));
-            geometry.setAttribute('uv3', new THREE.BufferAttribute(attr.uv3.array, 2));
-            const vertexShader = `
-                attribute vec3 instancePosition;
-                uniform mat4 bindMatrix; 
-                uniform mat4 bindMatrixInverse; 
-              
-                attribute vec4 skinIndex;
-                attribute vec4 skinWeight;
-                uniform highp sampler2D boneTexture;
-                mat4 getBoneMatrix( const in float i ) {
-                    int size = textureSize( boneTexture, 0 ).x;
-                    int j = int( i ) * 4;
-                    int x = j % size;
-                    int y = j / size;
-                    vec4 v1 = texelFetch( boneTexture, ivec2( x, y ), 0 );
-                    vec4 v2 = texelFetch( boneTexture, ivec2( x + 1, y ), 0 );
-                    vec4 v3 = texelFetch( boneTexture, ivec2( x + 2, y ), 0 );
-                    vec4 v4 = texelFetch( boneTexture, ivec2( x + 3, y ), 0 );
-                    return mat4( v1, v2, v3, v4 );
-                }
-                void main() {
-                    vec3 objectNormal = vec3( normal );
-                    mat4 boneMatX = getBoneMatrix( skinIndex.x );
-                    mat4 boneMatY = getBoneMatrix( skinIndex.y );
-                    mat4 boneMatZ = getBoneMatrix( skinIndex.z );
-                    mat4 boneMatW = getBoneMatrix( skinIndex.w );
-                    vec3 transformedNormal = objectNormal;
-                    transformedNormal = normalMatrix * transformedNormal;
-                    vec3 transformed = vec3( instancePosition );
-                    vec4 skinVertex = bindMatrix * vec4( transformed, 1.0 );
-                    vec4 skinned = vec4( 0.0 );
-                    skinned += boneMatX * skinVertex * skinWeight.x;
-                    skinned += boneMatY * skinVertex * skinWeight.y;
-                    skinned += boneMatZ * skinVertex * skinWeight.z;
-                    skinned += boneMatW * skinVertex * skinWeight.w;
-                    transformed = ( bindMatrixInverse * skinned ).xyz;
-                     vec4 mvPosition = vec4( instancePosition * 5., 1.0 );
-                    mvPosition = modelViewMatrix * mvPosition;
-                    gl_Position = projectionMatrix * mvPosition;
-                    gl_PointSize  = 10.0;
-                }
-            `;
-
-            const fragmentShader = `
-                void main() {
-                    gl_FragColor = vec4(vec3(1.,.5,.5), 1.0);
-                }
-            `;
-
-            const material = new THREE.ShaderMaterial({
-                vertexShader: vertexShader,
-                fragmentShader: fragmentShader,
-                uniforms:{
-                    bindMatrix : {value : bindMatrixSTATIC},
-                    bindMatrixInverse : {value : bindMatrixInverseSTATIC},
-                    boneTexture : {value : null}
-                }
-            });
-
- 
-            const points = new THREE.Points(geometry, material); 
-            console.log("pointAttr",points.geometry.attributes)
-            scene.add(points);
+            geometry.setAttribute('customAttribute', new THREE.Float32BufferAttribute(customAttribute, 1));
+            meshShowTexture = new THREE.Mesh(geometry, mat);
+            meshShowTexture.position.x = 200
+            scene.add(meshShowTexture);
         }
+
+
+
 
 
         function initMesh() {
@@ -301,15 +204,14 @@
             loader.load('dragon.gltf', async function (gltf) {
 
                 model = gltf.scene;
-                model.scale.set(120, 120, 120)
-                model.position.set(0, -150, 0)
-
 
                 let targetObject = null;
                 model.traverse(function (child) {
                     if (child.name === "GLTF_created_0") {
                         targetObject = child.children[1]
-                     
+                        saveMat = targetObject.material
+                        saveGeo = targetObject.geometry
+                        showTexture(saveMat, saveGeo)
                         child.children[0].visible = false
                         child.children[2].visible = false
                         targetObject = getSkinnedPoints(child.children[1])
@@ -317,14 +219,19 @@
                             shader.uniforms.bindMatrix = { value: bindMatrixSTATIC };
                             shader.uniforms.bindMatrixInverse = { value: bindMatrixInverseSTATIC };
                             shader.vertexShader = `
-                                uniform mat4 bindMatrix; 
-                                uniform mat4 bindMatrixInverse; 
-                            ` + shader.vertexShader;
+                            uniform mat4 bindMatrix; 
+                               uniform mat4 bindMatrixInverse; 
+                               
+                        ` + shader.vertexShader;
+                            let token = `#define STANDARD`
+                            let insert = `\nvarying vec4 vPos;`
+                            shader.vertexShader = shader.vertexShader.replace(token, token + insert);
 
-                            let token = `#include <fog_vertex>`;
-                            let insert = `
+                            token = `#include <fog_vertex>`;
+                            insert = `
                                 gl_PointSize  = 0.01;
-                             
+                                vec4 dc = modelMatrix * vec4(transformed, 1.0);
+                                vPos = dc;
                             `;
                             shader.vertexShader = shader.vertexShader.replace(token, token + insert);
 
@@ -384,23 +291,36 @@
                             `
                             shader.vertexShader = shader.vertexShader.replace(token, token + insert);
                             // shader.vertexShader = vertFinal
-                            console.log(shader.uniforms)
+
+
+
+                            token = `#define STANDARD`
+                            insert = `\nvarying vec4 vPos;`
+                            shader.fragmentShader = shader.fragmentShader.replace(token, token + insert);
+
+                            token = '#include <dithering_fragment>'
+                            insert = `
+                                gl_FragColor = vec4(vec3(0.),1.);
+                            `
+                            shader.fragmentShader = shader.fragmentShader.replace(token, token + insert);
 
                             shader.fragmentShader = `
-                                void main() {
-                                    gl_FragColor = vec4(vec3(.7,.5,1.),1.);
-                                }
+                            void main() {
+                            gl_FragColor = vec4(vec3(1.,.5,1.),1.);}
                             `
+                            console.log(shader.vertexShader)
                         }
 
 
                         child.children[1] = targetObject
-                        initDataTexture(child.children[1].geometry.attributes)
+
 
                     }
                 });
 
 
+                model.position.set(0, -200, 0)
+                model.scale.set(120, 120, 120)
                 mixer = new THREE.AnimationMixer(model);
                 const action = mixer.clipAction(gltf.animations[0]);
                 action.play();
@@ -499,7 +419,7 @@
             if (mixer) mixer.update(delta);
 
 
-          //  if (meshShowTexture) meshShowTexture.material.uniforms.renderTex.value = textureFBO
+
             renderer.render(scene, camera)
 
 

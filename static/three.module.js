@@ -31835,7 +31835,7 @@ class SkinnedMesh extends Mesh {
 	}
 
 	bind( skeleton, bindMatrix ) {
-
+		console.log("SKINNEDMESH>>>>>bind")
 		this.skeleton = skeleton;
 
 		if ( bindMatrix === undefined ) {
@@ -31854,13 +31854,13 @@ class SkinnedMesh extends Mesh {
 	}
 
 	pose() {
-
+		console.log("SKINNEDMESH>>>>>pose")
 		this.skeleton.pose();
 
 	}
 
 	normalizeSkinWeights() {
-
+		console.log("SKINNEDMESH>>>>>normalizeSkinWeights")
 		const vector = new Vector4();
 
 		const skinWeight = this.geometry.attributes.skinWeight;
@@ -31888,7 +31888,8 @@ class SkinnedMesh extends Mesh {
 	}
 
 	updateMatrixWorld( force ) {
-
+		// console.log("SKINNEDMESH>>>>>updateMatrixWorld",this.bindMatrixInverse.elements
+		// 	,this.bindMatrix.elements)
 		super.updateMatrixWorld( force );
 
 		if ( this.bindMode === AttachedBindMode ) {
@@ -31908,7 +31909,7 @@ class SkinnedMesh extends Mesh {
 	}
 
 	applyBoneTransform( index, vector ) {
-
+		console.log("SKINNEDMESH>>>>>applyBoneTransform")
 		const skeleton = this.skeleton;
 		const geometry = this.geometry;
 
