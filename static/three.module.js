@@ -7925,16 +7925,16 @@ class Object3D extends EventDispatcher {
 		}
 
 		if ( this.isSkinnedMesh ) {
-
+		
 			object.bindMode = this.bindMode;
 			object.bindMatrix = this.bindMatrix.toArray();
-
+			
 			if ( this.skeleton !== undefined ) {
 
 				serialize( meta.skeletons, this.skeleton );
 
 				object.skeleton = this.skeleton.uuid;
-
+				
 			}
 
 		}
@@ -17805,9 +17805,9 @@ function WebGLObjects( gl, geometries, attributes, info ) {
 		if ( object.isSkinnedMesh ) {
 
 			const skeleton = object.skeleton;
-
+		
 			if ( updateMap.get( skeleton ) !== frame ) {
-
+				
 				skeleton.update();
 
 				updateMap.set( skeleton, frame );
@@ -30025,7 +30025,6 @@ class WebGLRenderer {
 			// otherwise textures used for skinning and morphing can take over texture units reserved for other material textures
 
 			if ( object.isSkinnedMesh ) {
-
 				p_uniforms.setOptional( _gl, object, 'bindMatrix' );
 				p_uniforms.setOptional( _gl, object, 'bindMatrixInverse' );
 
@@ -30037,6 +30036,7 @@ class WebGLRenderer {
 
 					p_uniforms.setValue( _gl, 'boneTexture', skeleton.boneTexture, textures );
 
+				
 				}
 
 			}
@@ -31909,7 +31909,7 @@ class SkinnedMesh extends Mesh {
 	}
 
 	applyBoneTransform( index, vector ) {
-		console.log("SKINNEDMESH>>>>>applyBoneTransform")
+		//console.log(vector)
 		const skeleton = this.skeleton;
 		const geometry = this.geometry;
 
@@ -31935,7 +31935,7 @@ class SkinnedMesh extends Mesh {
 			}
 
 		}
-
+		//console.log("render data xyz này vào texture",vector.applyMatrix4( this.bindMatrixInverse ))
 		return vector.applyMatrix4( this.bindMatrixInverse );
 
 	}

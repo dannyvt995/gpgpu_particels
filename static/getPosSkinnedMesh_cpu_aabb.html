@@ -44,6 +44,7 @@
         import { GUI } from 'three/addons/lil-gui.module.min.js';
         import { GLTFLoader } from 'three/addons/GLTFLoader.js';
         import { DRACOLoader } from 'three/addons/DRACOLoader.js';
+        import { ColladaLoader } from 'three/addons/ColladaLoader.js';
         import { OrbitControls } from 'three/addons/OrbitControls.js';
         import { radixSort } from 'three/addons/SortUtils.js';
         import { MeshSurfaceSampler } from 'three/addons/MeshSurfaceSampler.js';
@@ -52,31 +53,93 @@
         let geometries, mesh, material;
         let saveMat, saveGeo, dataColection
         let time = 0
-        let textureFBO, pointsCustom
+        let textureFBO, pointsCustom, sphereCheck
 
+        let COUNTVERTICE
 
         //new
-        let dataDragonAnim,skinnedMesh
+        let dataDragonAnim, skinnedMesh
         const clock = new THREE.Clock();
-        var aabb = new THREE.Box3();
 
+        let aabb = new THREE.Box3();
+        let vertex = new THREE.Vector3();
+        let temp = new THREE.Vector3();
+        let skinned = new THREE.Vector3();
+        let skinIndices = new THREE.Vector4();
+        let skinWeights = new THREE.Vector4();
+        let boneMatrix = new THREE.Matrix4();
 
-        //for skined static
-        const bindMatrixSTATIC = new THREE.Matrix4();
-        bindMatrixSTATIC.set(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1);
-        const bindMatrixInverseSTATIC = new THREE.Matrix4();
-        bindMatrixInverseSTATIC.set(0.1139, 0, 0, 0, 0, 0.1139, 0, 0, 0, 0, 0.1139, 0, 0, 34.1586, 0, 1);
-        var vertex = new THREE.Vector3();
-var temp = new THREE.Vector3();
-var skinned = new THREE.Vector3();
-var skinIndices = new THREE.Vector4();
-var skinWeights = new THREE.Vector4();
-var boneMatrix = new THREE.Matrix4();
         init();
         initModelAndPrepare();
         animate();
+        function initPoint() {
+            const vertices = [];
 
-        function checkTexture() {
+            for (let i = 0; i < 19554; i++) {
+                const x = Math.random();
+                const y = Math.random();
+                const z = Math.random();
+
+                vertices.push(x, y, z);
+            }
+
+            const geometry = new THREE.BufferGeometry();
+            geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+            const material = new THREE.ShaderMaterial({
+                uniforms: {
+                    dataTexture: { value: null },
+                    uTime: { value: 0 }
+                },
+                vertexShader: `
+                uniform sampler2D dataTexture;
+                varying vec3 vColor;
+                uniform float uTime;
+                void main() {
+                    float width = 140.;
+                    float height = 100.;
+                    float x = mod(float(gl_VertexID), width);
+                    float y = floor(float(gl_VertexID) / width);
+                    vec2 uv = vec2(x / width, y / height);
+                    vec4 particle = texture2D(dataTexture, uv);
+                    vec3 pos = particle.xyz;
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(pos , 1.0);
+                    gl_PointSize = 2.0;
+                }
+            `,
+                fragmentShader: `
+                varying vec3 vColor;
+
+                void main() {
+                    gl_FragColor = vec4(vec3(1.,.5,.7), 1.0);
+                }
+            `
+            });
+            pointsCustom = new THREE.Points(geometry, material);
+            scene.add(pointsCustom);
+        }
+        function initDataTex(a) {
+            // TEXTURE NÀY PHẢI > POINT MODEL , PHẦN CÒN LẠI ÁP DỤNG SIM TRAIL
+            const listPosOrigin = a.position.array
+
+            const width = 140;
+            const height = 100;
+
+            const size = width * height;
+            const data = new Float32Array( 4 * size );
+
+            for ( let i = 0; i < size; i ++ ) {
+                const stride = i * 4;
+                data[ stride ] = listPosOrigin[i*3];
+                data[ stride + 1 ] = listPosOrigin[i*3+1];
+                data[ stride + 2 ] = listPosOrigin[i*3+2];
+                data[ stride + 3 ] = 1;
+            }
+            console.log(a.position,data) 
+            textureFBO = new THREE.DataTexture( data, width, height, THREE.RGBAFormat, THREE.FloatType );
+            textureFBO.needsUpdate = true;
+        }
+        
+        function showTexture() {
             const vertexShader = `
                 varying vec2 vUv;
                 void main() {
@@ -89,8 +152,10 @@ var boneMatrix = new THREE.Matrix4();
                 varying vec2 vUv;
                 uniform sampler2D renderTex;
                 void main() {
-                 gl_FragColor = texture2D(renderTex, vUv);
-              // gl_FragColor = vec4(vUv,1.,1.);
+                vec4 tex = texture2D(renderTex,vUv);
+                    gl_FragColor = tex;
+
+                  //  gl_FragColor = vec4(tex.x,.5,1.,1.);
                 }
             `;
 
@@ -101,134 +166,52 @@ var boneMatrix = new THREE.Matrix4();
                 vertexShader: vertexShader,
                 fragmentShader: fragmentShader,
                 transparent: true,
-                side: 2,
+                side:2
             });
-            const geometry = new THREE.PlaneGeometry(200, 200);
+            const geometry = new THREE.PlaneGeometry(10, 10,200,200);
 
-            meshShowTexture = new THREE.Mesh(geometry, shaderMaterial);
-            meshShowTexture.position.x = 200
+            meshShowTexture = new THREE.Mesh(geometry, shaderMaterial /* new THREE.MeshBasicMaterial({color:'blue'}) */);
+            meshShowTexture.position.x = 10
             scene.add(meshShowTexture);
-
         }
 
 
-        function initDataAnim(skinMesh) {
-
-            const width = 200; // chiều rộng của texture
-            const height = 200; // chiều cao của texture
-            const size = width * height;
-            const data = new Float32Array(size * 4); // Tạo một mảng Float32Array để lưu trữ data
-
-
-
-            const count = skinMesh.geometry.attributes.position.count //23512
-            const posArr = skinMesh.geometry.attributes.position.array
-            console.log(posArr)
-            for (let i = 0; i < count; i++) {
-
-                const vector = new THREE.Vector3(
-                    posArr[i * 3],
-                    posArr[i * 3 + 1],
-                    posArr[i * 3 + 2]
-                );
-
-                const dataOriginXYZ = skinMesh.applyBoneTransform(i, vector);
-
-                const baseIndex = i * 4; // Tính toán vị trí lưu trữ trong mảng data
-                data[baseIndex] = dataOriginXYZ.x;
-                data[baseIndex + 1] = dataOriginXYZ.y;
-                data[baseIndex + 2] = dataOriginXYZ.z;
-                data[baseIndex + 3] = 1.0; // Giá trị alpha, có thể thay đổi tùy theo yêu cầu của bạn
-
-
-
-            }
-
-            dataDragonAnim = new THREE.DataTexture(data, width, height, THREE.RGBAFormat, THREE.FloatType);
-            dataDragonAnim.needsUpdate = true;
-            console.log(dataDragonAnim)
-            checkTexture()
-            initPoint()
-
-        }
-
-
-        function initPoint() {
-
-            const geometry = new THREE.BufferGeometry();
-
-
-            const vertices = [];
-
-            for (let i = 0; i < 10000; i++) {
-                const x = THREE.MathUtils.randFloatSpread(2000);
-                const y = THREE.MathUtils.randFloatSpread(2000);
-                const z = THREE.MathUtils.randFloatSpread(2000);
-
-                vertices.push(x, y, z);
-            }
-            geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-
-            // Tạo Material cho Instanced Points, sử dụng DataTexture
-            const material = new THREE.ShaderMaterial({
-                uniforms: {
-                    dataTexture: { value: null },
-                    uTime: { value: 0 }
-                },
-                vertexShader: `
-                uniform sampler2D dataTexture;
-                varying vec3 vColor;
-                uniform float uTime;
-                void main() {
-                 int index = gl_VertexID;
-                int width = 100;
-                int height = 100;
-
-                float x = float(index % width) / float(width);
-                float y = float(index / width) / float(height);
-
-                vec4 data = texture2D(dataTexture, vec2(x, y));
-                vec3 transformed = data.rgb;
-                    gl_Position = projectionMatrix * modelViewMatrix * vec4(transformed , 1.0);
-                    gl_PointSize = 2.0;
-                }
-            `,
-                fragmentShader: `
-                varying vec3 vColor;
-
-                void main() {
-                    gl_FragColor = vec4(vec3(1.,.5,.7), 1.0);
-                }
-            `
-            });
-            const materialp = new THREE.PointsMaterial({ color: 0x888888 });
-
-            pointsCustom = new THREE.Points(geometry, material);
-            scene.add(pointsCustom);
-
-        }
-        function initFBO(model) {
-            skinnedMesh = model.getObjectByName("Object_233");
-            initDataAnim(skinnedMesh)
-          
-        }
         function initModelAndPrepare() {
+            const loader = new ColladaLoader();
+            loader.load('./models/stormtrooper.dae', function (collada) {
+                console.log(collada)
+          
+                let root = collada.scene;
+                let clip = collada.animations[0];
+                let targetObject = null
+                root.traverse(function (child) {
+                    if (child.name === "Stormtrooper") {
+                        child.material.wireframe = true
+                        skinnedMesh = child
+                        COUNTVERTICE = child.geometry.attributes.position.count
+                       
+                    }
+                })
+                initDataTex(skinnedMesh.geometry.attributes)
+                showTexture()
+                initPoint()
+        
+                root.position.x = -10
+                mixer = new THREE.AnimationMixer(root);
+                var action = mixer.clipAction(clip).play()
 
-            const loader = new GLTFLoader().setPath("models/");
-            const dracoLoader = new DRACOLoader();
-            dracoLoader.setDecoderPath('/jsm/draco/');
-            loader.setDRACOLoader(dracoLoader);
-            loader.load('dragon.gltf', async function (gltf) {
-                model = gltf.scene;
-                initFBO(model)
-                mixer = new THREE.AnimationMixer(model);
-                const action = mixer.clipAction(gltf.animations[0]);
-                action.play();
-                action.paused = false;
-                // mixer.setTime(8.)
-                // action.paused = true
-                scene.add(model)
-            
+
+                sphereCheck = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshBasicMaterial({ color: 'red' }))
+                scene.add(sphereCheck)
+        
+                scene.add(root);
+
+                // show ordinary AABB
+
+                var defaultAABB = new THREE.Box3().setFromObject(skinnedMesh);
+                scene.add(new THREE.Box3Helper(defaultAABB, 0xff0000));
+
+                scene.add(new THREE.Box3Helper(aabb, 0x00ff00));
             });
 
 
@@ -243,16 +226,8 @@ var boneMatrix = new THREE.Matrix4();
 
             // camera
 
-            camera = new THREE.OrthographicCamera(
-                -width / 2,
-                width / 2,
-                height / 2,
-                -height / 2,
-                0.0001,
-                10000,
-            )
             camera = new THREE.PerspectiveCamera(45, width / height, 0.0001, 1000);
-            camera.position.set(700, 700, 700)
+            camera.position.set(0, 0, -25)
             camera.lookAt(new THREE.Vector3(0, 0, 0))
             // renderer
 
@@ -267,12 +242,11 @@ var boneMatrix = new THREE.Matrix4();
 
             scene = new THREE.Scene();
             scene.background = new THREE.Color(0xffffff);
-            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
-            // scene.add(directionalLight);
+            const light = new THREE.AmbientLight(0x404040, 20); // soft white light
+            scene.add(light);
             // controls
 
             controls = new OrbitControls(camera, renderer.domElement);
-
 
             // stats
 
@@ -311,22 +285,22 @@ var boneMatrix = new THREE.Matrix4();
             render();
 
         }
-       
+
         function updateAABB(skinnedMesh, aabb) {
 
-            var skeleton = skinnedMesh.skeleton;
-            var boneMatrices = skeleton.boneMatrices;
-            var geometry = skinnedMesh.geometry;
+            let skeleton = skinnedMesh.skeleton;
+            let boneMatrices = skeleton.boneMatrices;
+            let geometry = skinnedMesh.geometry;
 
-            var index = geometry.index;
-            var position = geometry.attributes.position;
-            var skinIndex = geometry.attributes.skinIndex;
-            var skinWeigth = geometry.attributes.skinWeight;
+            let index = geometry.index;
+            let position = geometry.attributes.position;
+            let skinIndex = geometry.attributes.skinIndex;
+            let skinWeigth = geometry.attributes.skinWeight;
 
-            var bindMatrix = skinnedMesh.bindMatrix;
-            var bindMatrixInverse = skinnedMesh.bindMatrixInverse;
+            let bindMatrix = skinnedMesh.bindMatrix;
+            let bindMatrixInverse = skinnedMesh.bindMatrixInverse;
 
-            var i, j, si, sw;
+            let i, j, si, sw;
 
             aabb.makeEmpty();
 
@@ -339,6 +313,7 @@ var boneMatrix = new THREE.Matrix4();
                 for (i = 0; i < index.count; i++) {
 
                     vertex.fromBufferAttribute(position, index[i]);
+
                     skinIndices.fromBufferAttribute(skinIndex, index[i]);
                     skinWeights.fromBufferAttribute(skinWeigth, index[i]);
 
@@ -371,7 +346,7 @@ var boneMatrix = new THREE.Matrix4();
             } else {
 
                 // non-indexed geometry
-
+               // console.log(position.count)
                 for (i = 0; i < position.count; i++) {
 
                     vertex.fromBufferAttribute(position, i);
@@ -397,11 +372,14 @@ var boneMatrix = new THREE.Matrix4();
                     }
 
                     skinned.applyMatrix4(bindMatrixInverse); // back to local space
-
+                 
                     // expand aabb
-
+               
                     aabb.expandByPoint(skinned);
-
+                    textureFBO.source.data.data[i*3] = skinned.x;
+                    textureFBO.source.data.data[i*3+1] = skinned.y;
+                    textureFBO.source.data.data[i*3+2] = skinned.z;
+                    textureFBO.needsUpdate = true
                 }
 
             }
@@ -409,29 +387,17 @@ var boneMatrix = new THREE.Matrix4();
             aabb.applyMatrix4(skinnedMesh.matrixWorld);
 
         }
-
+      
         function render() {
-            time += 0.1
             const delta = clock.getDelta();
-            if (mixer) {
-                mixer.update(delta); 
+            if (mixer !== undefined) {
+                mixer.update(delta);
+                updateAABB(skinnedMesh, aabb);
             }
-            console.log(vertex)
-
-            if (meshShowTexture) meshShowTexture.material.uniforms.renderTex.value = dataDragonAnim
-            if (pointsCustom) {
-                pointsCustom.material.uniforms.dataTexture.value = dataDragonAnim
-                pointsCustom.material.uniforms.uTime.value = time
-
-            }
+      
+            if(meshShowTexture) meshShowTexture.material.uniforms.renderTex.value = textureFBO
+            if(pointsCustom) pointsCustom.material.uniforms.dataTexture.value = textureFBO
             renderer.render(scene, camera)
-            // if(pointsCustom) {
-            //     pointsCustom.skeleton.update()
-            //     pointsCustom.skeleton.computeBoneTexture()
-            //     pointsCustom.material.uniforms.boneTexture = pointsCustom.skeleton.boneTexture
-            // }
-
-
         }
 
     </script>
