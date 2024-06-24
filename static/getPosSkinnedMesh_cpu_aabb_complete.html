@@ -55,7 +55,9 @@
         let time = 0
         let textureFBO, pointsCustom, sphereCheck
 
-        let COUNTVERTICE
+        let ARRAYPOSMODEL
+        let COUNTPOINT
+        let SIZEVAT = new THREE.Vector2()
 
         //new
         let dataDragonAnim, skinnedMesh
@@ -72,14 +74,15 @@
         init();
         initModelAndPrepare();
         animate();
+
         function initPoint() {
+            console.log('1time',COUNTPOINT)
             const vertices = [];
-
-            for (let i = 0; i < 19554; i++) {
-                const x = Math.random();
-                const y = Math.random();
-                const z = Math.random();
-
+            console.log(COUNTPOINT)
+            for (let i = 0; i < COUNTPOINT; i++) {
+                const x = ARRAYPOSMODEL[i * 3];
+                const y = ARRAYPOSMODEL[i * 3 + 1];
+                const z = ARRAYPOSMODEL[i * 3 + 2];
                 vertices.push(x, y, z);
             }
 
@@ -88,53 +91,56 @@
             const material = new THREE.ShaderMaterial({
                 uniforms: {
                     dataTexture: { value: null },
-                    uTime: { value: 0 }
+                    uTime: { value: 0 },
+                    uSizeVAT:{value: SIZEVAT}
                 },
                 vertexShader: `
                 uniform sampler2D dataTexture;
                 varying vec3 vColor;
                 uniform float uTime;
+                uniform vec2 uSizeVAT;
                 void main() {
-                    float width = 140.;
-                    float height = 100.;
-                    float x = mod(float(gl_VertexID), width);
-                    float y = floor(float(gl_VertexID) / width);
-                    vec2 uv = vec2(x / width, y / height);
+                    float x = mod(float(gl_VertexID), uSizeVAT.x);
+                    float y = floor(float(gl_VertexID) / uSizeVAT.x);
+                    vec2 uv = vec2(x / uSizeVAT.x, y / uSizeVAT.y);
                     vec4 particle = texture2D(dataTexture, uv);
-                    vec3 pos = particle.xyz;
-                    gl_Position = projectionMatrix * modelViewMatrix * vec4(pos , 1.0);
-                    gl_PointSize = 2.0;
+                    vec3 pos = particle.xyz / 5.;
+                
+                    vec3 posOrigin = position * 3.;
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+                    gl_PointSize = 1.0;
                 }
             `,
                 fragmentShader: `
                 varying vec3 vColor;
 
                 void main() {
-                    gl_FragColor = vec4(vec3(1.,.5,.7), 1.0);
+                    gl_FragColor = vec4(1.-vec3(1.,1.,.7), 1.0);
                 }
             `
             });
             pointsCustom = new THREE.Points(geometry, material);
             scene.add(pointsCustom);
         }
-        function initDataTex(a) {
+
+        function initDataTex() {
             // TEXTURE NÀY PHẢI > POINT MODEL , PHẦN CÒN LẠI ÁP DỤNG SIM TRAIL
-            const listPosOrigin = a.position.array
+            console.log(SIZEVAT,SIZEVAT.x*SIZEVAT.y ,COUNTPOINT)
+            const width = SIZEVAT.x;
+            const height = SIZEVAT.y;
 
-            const width = 140;
-            const height = 100;
-
-            const size = width * height;
-            const data = new Float32Array( 4 * size );
+            const size = width * height  + (COUNTPOINT - (SIZEVAT.x*SIZEVAT.y));
+            console.log(size)
+            const data = new Float32Array( 4 * size);
 
             for ( let i = 0; i < size; i ++ ) {
                 const stride = i * 4;
-                data[ stride ] = listPosOrigin[i*3];
-                data[ stride + 1 ] = listPosOrigin[i*3+1];
-                data[ stride + 2 ] = listPosOrigin[i*3+2];
+                data[ stride ] = ARRAYPOSMODEL[i*3];
+                data[ stride + 1 ] = ARRAYPOSMODEL[i*3+1];
+                data[ stride + 2 ] = ARRAYPOSMODEL[i*3+2];
                 data[ stride + 3 ] = 1;
             }
-            console.log(a.position,data) 
+
             textureFBO = new THREE.DataTexture( data, width, height, THREE.RGBAFormat, THREE.FloatType );
             textureFBO.needsUpdate = true;
         }
@@ -152,10 +158,8 @@
                 varying vec2 vUv;
                 uniform sampler2D renderTex;
                 void main() {
-                vec4 tex = texture2D(renderTex,vUv);
-                    gl_FragColor = tex;
-
-                  //  gl_FragColor = vec4(tex.x,.5,1.,1.);
+                    vec4 tex = texture2D(renderTex,vUv);
+                    gl_FragColor = vec4(vec3(tex)/20.,1.) ;
                 }
             `;
 
@@ -177,27 +181,44 @@
 
 
         function initModelAndPrepare() {
-            const loader = new ColladaLoader();
-            loader.load('./models/stormtrooper.dae', function (collada) {
-                console.log(collada)
-          
-                let root = collada.scene;
-                let clip = collada.animations[0];
-                let targetObject = null
+            const loader = new GLTFLoader().setPath("models/");
+            const dracoLoader = new DRACOLoader();
+            dracoLoader.setDecoderPath('/jsm/draco/');
+            loader.setDRACOLoader(dracoLoader);
+            loader.load('dragon.gltf', async function (gltf) {
+
+                let root = gltf.scene;
+                let clip = gltf.animations[0];
+
                 root.traverse(function (child) {
-                    if (child.name === "Stormtrooper") {
-                        child.material.wireframe = true
+                    if (child.name === "GLTF_created_0") {
+                        child.children[0].visible = false
+                        child.children[2].visible = false
+                    }
+                    if (child.name === "Object_233") {
+                       
+                        child.material.wireframe = false
+                     
                         skinnedMesh = child
-                        console.log(child)
-                        COUNTVERTICE = child.geometry.attributes.position.count
+                        skinnedMesh.geometry.index = null 
+                        // set for use AABB , chưa hiểu vì sao có index thì err
+                        // index của model này quá lớn
+
+                        ARRAYPOSMODEL = skinnedMesh.geometry.attributes.position.array
+                        COUNTPOINT = skinnedMesh.geometry.attributes.position.count
+                        let withTex = Math.floor(Math.sqrt(COUNTPOINT))
+                        let heightTex = Math.floor(Math.sqrt(COUNTPOINT))
+                        SIZEVAT = new THREE.Vector2(withTex,heightTex)
+
+                        initDataTex()
+                        showTexture()
+                        initPoint()
                        
                     }
                 })
-                initDataTex(skinnedMesh.geometry.attributes)
-                showTexture()
-                initPoint()
+              
         
-                root.position.x = -10
+                root.position.x = 0
                 mixer = new THREE.AnimationMixer(root);
                 var action = mixer.clipAction(clip).play()
 
@@ -209,8 +230,8 @@
 
                 // show ordinary AABB
 
-                var defaultAABB = new THREE.Box3().setFromObject(skinnedMesh);
-                scene.add(new THREE.Box3Helper(defaultAABB, 0xff0000));
+                var defaultAABB = new THREE.Box3().setFromObject(root);
+               // scene.add(new THREE.Box3Helper(defaultAABB, 0xff0000));
 
                 scene.add(new THREE.Box3Helper(aabb, 0x00ff00));
             });
@@ -314,7 +335,6 @@
                 for (i = 0; i < index.count; i++) {
 
                     vertex.fromBufferAttribute(position, index[i]);
-
                     skinIndices.fromBufferAttribute(skinIndex, index[i]);
                     skinWeights.fromBufferAttribute(skinWeigth, index[i]);
 
@@ -345,9 +365,9 @@
                 }
 
             } else {
-
+               
                 // non-indexed geometry
-               // console.log(position.count)
+               //console.log(position.count)
                 for (i = 0; i < position.count; i++) {
 
                     vertex.fromBufferAttribute(position, i);
@@ -377,12 +397,15 @@
                     // expand aabb
                
                     aabb.expandByPoint(skinned);
-                    textureFBO.source.data.data[i*3] = skinned.x;
-                    textureFBO.source.data.data[i*3+1] = skinned.y;
-                    textureFBO.source.data.data[i*3+2] = skinned.z;
+                    textureFBO.source.data.data[i*4] = skinned.x;
+                    textureFBO.source.data.data[i*4+1] = skinned.y;
+                    textureFBO.source.data.data[i*4+2] = skinned.z;
+                  
                     textureFBO.needsUpdate = true
+                 
+                    
                 }
-
+               
             }
 
             aabb.applyMatrix4(skinnedMesh.matrixWorld);
@@ -393,9 +416,10 @@
             const delta = clock.getDelta();
             if (mixer !== undefined) {
                 mixer.update(delta);
-                updateAABB(skinnedMesh, aabb);
+              updateAABB(skinnedMesh, aabb);
+            
             }
-      
+        
             if(meshShowTexture) meshShowTexture.material.uniforms.renderTex.value = textureFBO
             if(pointsCustom) pointsCustom.material.uniforms.dataTexture.value = textureFBO
             renderer.render(scene, camera)
