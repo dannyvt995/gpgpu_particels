@@ -85,7 +85,7 @@
 			const float UPPER_BOUNDS = BOUNDS;
 			const float LOWER_BOUNDS = -UPPER_BOUNDS;
 
-			const float SPEED_LIMIT = 9.0;
+			const float SPEED_LIMIT = 10.0;
 
 			float rand( vec2 co ){
 				return fract( sin( dot( co.xy, vec2(12.9898,78.233) ) ) * 43758.5453 );
@@ -142,7 +142,7 @@
 
 				if ( dist < preyRadius ) {
 
-					velocity += normalize( dir) * 10. * delta;
+					velocity += normalize( dir * randToEach) * 10. * delta;
 				
 					limit += 15.0;
 				} else {
@@ -150,7 +150,7 @@
 				}
 
 				// Attract flocks to the center
-				vec3 central = vec3( predator.x * UPPER_BOUNDS ,predator.y * UPPER_BOUNDS,  0. );
+				vec3 central = vec3( predator.x * 2245. ,predator.y *1270. ,  0. );
 				dir = selfPosition - central;
 				dist = length( dir );
 
@@ -208,7 +208,7 @@
 		let windowHalfX = window.innerWidth / 2;
 		let windowHalfY = window.innerHeight / 2;
 
-		const BOUNDS = 800, BOUNDS_HALF = BOUNDS / 2;
+		const BOUNDS = 500, BOUNDS_HALF = BOUNDS / 2;
 
 		let last = performance.now();
 
@@ -245,7 +245,7 @@
 			scene.background = new THREE.Color(0x00000);
 			
 
-
+			console.log(window.innerWidth,window.innerHeight)
 		
 			const axesHelper = new THREE.AxesHelper( window.innerHeight );
 			//scene.add( axesHelper );
@@ -612,7 +612,7 @@
 			
 		//	meshDemo.receiveShadow  = true
 		//	meshDemo.castShadow  = true
-			scene.add(groundMesh,meshDemo);
+			scene.add(groundMesh);
 
 		}
 

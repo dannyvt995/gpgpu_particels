@@ -1,23 +1,30 @@
-import * as THREE from 'three'
-import { render, events, extend } from '@react-three/fiber'
-import './styles.css'
-import App from './App'
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import { Canvas } from '@react-three/fiber';
+import * as THREE from 'three';
+import App from './App';
+import './styles.css';
 
-extend(THREE)
+// Extend THREE globally
+extend(THREE);
 
-window.addEventListener('resize', () =>
-  render(<App />, document.querySelector('canvas'), {
-    events,
-    linear: true,
-    camera: { fov: 25, position: [0, 0, 6] },
-    // https://barradeau.com/blog/?p=621
-    // This examples needs WebGL1 (?)
-    gl: new THREE.WebGL1Renderer({
-      canvas: document.querySelector('canvas'),
+const root = createRoot(document.getElementById('root'));
+
+root.render(
+  <Canvas
+    camera={{ fov: 25, position: [0, 0, 6] }}
+    gl={{
       antialias: true,
-      alpha: true
-    })
-  })
-)
-
-window.dispatchEvent(new Event('resize'))
+      alpha: true,
+    }}
+    onCreated={({ gl }) => {
+      gl.setSize(window.innerWidth, window.innerHeight);
+      window.addEventListener('resize', () => {
+        gl.setSize(window.innerWidth, window.innerHeight);
+        gl.setPixelRatio(window.devicePixelRatio);
+      });
+    }}
+  >
+    <App />
+  </Canvas>
+);
