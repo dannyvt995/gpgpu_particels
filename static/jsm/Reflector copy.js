@@ -65,7 +65,7 @@ class Reflector extends Mesh {
 		this.material = material;
 
 		this.onBeforeRender = function ( renderer, scene, camera ) {
-			
+
 			reflectorWorldPosition.setFromMatrixPosition( scope.matrixWorld );
 			cameraWorldPosition.setFromMatrixPosition( camera.matrixWorld );
 
@@ -114,7 +114,7 @@ class Reflector extends Mesh {
 			textureMatrix.multiply( virtualCamera.projectionMatrix );
 			textureMatrix.multiply( virtualCamera.matrixWorldInverse );
 			textureMatrix.multiply( scope.matrixWorld );
-			
+		
 			// Now update projection matrix with new clip plane, implementing code from: http://www.terathon.com/code/oblique.html
 			// Paper explaining this technique: http://www.terathon.com/lengyel/Lengyel-Oblique.pdf
 			reflectorPlane.setFromNormalAndCoplanarPoint( normal, reflectorWorldPosition );
@@ -257,9 +257,8 @@ Reflector.ReflectorShader = {
 			#include <logdepthbuf_fragment>
 
 			vec4 base = texture2DProj( tDiffuse, vec4(vUv.x ,vUv.y,vUv.z,vUv.w) );
-		//	vec4 baseUv = texture2D( tDiffuse, vUv.xy / 10. );
-			gl_FragColor = vec4(  blendOverlay( base.rgb, vec3(1.,1.,.5) ) , .9 );
-			//gl_FragColor = baseUv;
+			gl_FragColor = vec4( blendOverlay( base.rgb, color ) + vec3(.4,.5,.6), 1.0 );
+
 			#include <tonemapping_fragment>
 			#include <colorspace_fragment>
 

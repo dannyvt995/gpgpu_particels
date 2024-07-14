@@ -2,7 +2,7 @@
 <html lang="en">
 
 <head>
-    <title>three.js webgl - mesh - batch</title>
+    <title>Helu</title>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
 
@@ -24,14 +24,19 @@
         color: #08f;
     }
 
-    p {
-        display: none;
+    .tools {
+        display: flex;
+        margin: 0 auto;
+        position: fixed;
+        left: 50%;
     }
 </style>
 
 <body>
 
-    <p>https://codesandbox.io/p/sandbox/three-js-instanced-skinned-mesh-2yfgiu?file=%2Findex.html%3A22%2C1</p>
+    <div class="tools">
+        <button id="stop_delta">Stop delta</button>
+    </div>
     <script type="importmap">
 		{
 			"imports": {
@@ -40,7 +45,236 @@
 			}
 		}
 	</script>
+    <script id="heightmapFragmentShader" type="x-shader/x-fragment">
 
+        #include <common>
+
+        uniform vec2 mousePos;
+        uniform float mouseSize;
+        uniform float viscosityConstant;
+        uniform float heightCompensation;
+
+        void main()	{
+
+            vec2 cellSize = 1.0 / resolution.xy;
+
+            vec2 uv = gl_FragCoord.xy * cellSize;
+
+            // heightmapValue.x == height from previous frame
+            // heightmapValue.y == height from penultimate frame
+            // heightmapValue.z, heightmapValue.w not used
+            vec4 heightmapValue = texture2D( heightmap, uv );
+
+            // Get neighbours
+            vec4 north = texture2D( heightmap, uv + vec2( 0.0, cellSize.y ) );
+            vec4 south = texture2D( heightmap, uv + vec2( 0.0, - cellSize.y ) );
+            vec4 east = texture2D( heightmap, uv + vec2( cellSize.x, 0.0 ) );
+            vec4 west = texture2D( heightmap, uv + vec2( - cellSize.x, 0.0 ) );
+
+            // https://web.archive.org/web/20080618181901/http://freespace.virgin.net/hugo.elias/graphics/x_water.htm
+
+            float newHeight = ( ( north.x + south.x + east.x + west.x ) * 0.5 - heightmapValue.y ) * viscosityConstant;
+
+            // Mouse influence
+            float mousePhase = clamp( length( ( uv - vec2( 0.5 ) ) * BOUNDS - vec2( mousePos.x, - mousePos.y ) ) * PI / mouseSize, 0.0, PI );
+            newHeight += ( cos( mousePhase ) + 1.0 ) * 0.28;
+
+            heightmapValue.y = heightmapValue.x;
+            heightmapValue.x = newHeight;
+
+            gl_FragColor = heightmapValue;
+
+        }
+
+    </script>
+
+    <!-- This is just a smoothing 'compute shader' for using manually: -->
+    <script id="smoothFragmentShader" type="x-shader/x-fragment">
+
+        uniform sampler2D smoothTexture;
+
+        void main()	{
+
+            vec2 cellSize = 1.0 / resolution.xy;
+
+            vec2 uv = gl_FragCoord.xy * cellSize;
+
+            // Computes the mean of texel and 4 neighbours
+            vec4 textureValue = texture2D( smoothTexture, uv );
+            textureValue += texture2D( smoothTexture, uv + vec2( 0.0, cellSize.y ) );
+            textureValue += texture2D( smoothTexture, uv + vec2( 0.0, - cellSize.y ) );
+            textureValue += texture2D( smoothTexture, uv + vec2( cellSize.x, 0.0 ) );
+            textureValue += texture2D( smoothTexture, uv + vec2( - cellSize.x, 0.0 ) );
+
+            textureValue /= 5.0;
+
+            gl_FragColor = textureValue;
+
+        }
+
+    </script>
+
+    <!-- This is a 'compute shader' to read the current level and normal of water at a point -->
+    <!-- It is used with a variable of size 1x1 -->
+    <script id="readWaterLevelFragmentShader" type="x-shader/x-fragment">
+
+        uniform vec2 point1;
+
+        uniform sampler2D levelTexture;
+
+        // Integer to float conversion from https://stackoverflow.com/questions/17981163/webgl-read-pixels-from-floating-point-render-target
+
+        float shift_right( float v, float amt ) {
+
+            v = floor( v ) + 0.5;
+            return floor( v / exp2( amt ) );
+
+        }
+
+        float shift_left( float v, float amt ) {
+
+            return floor( v * exp2( amt ) + 0.5 );
+
+        }
+
+        float mask_last( float v, float bits ) {
+
+            return mod( v, shift_left( 1.0, bits ) );
+
+        }
+
+        float extract_bits( float num, float from, float to ) {
+
+            from = floor( from + 0.5 ); to = floor( to + 0.5 );
+            return mask_last( shift_right( num, from ), to - from );
+
+        }
+
+        vec4 encode_float( float val ) {
+            if ( val == 0.0 ) return vec4( 0, 0, 0, 0 );
+            float sign = val > 0.0 ? 0.0 : 1.0;
+            val = abs( val );
+            float exponent = floor( log2( val ) );
+            float biased_exponent = exponent + 127.0;
+            float fraction = ( ( val / exp2( exponent ) ) - 1.0 ) * 8388608.0;
+            float t = biased_exponent / 2.0;
+            float last_bit_of_biased_exponent = fract( t ) * 2.0;
+            float remaining_bits_of_biased_exponent = floor( t );
+            float byte4 = extract_bits( fraction, 0.0, 8.0 ) / 255.0;
+            float byte3 = extract_bits( fraction, 8.0, 16.0 ) / 255.0;
+            float byte2 = ( last_bit_of_biased_exponent * 128.0 + extract_bits( fraction, 16.0, 23.0 ) ) / 255.0;
+            float byte1 = ( sign * 128.0 + remaining_bits_of_biased_exponent ) / 255.0;
+            return vec4( byte4, byte3, byte2, byte1 );
+        }
+
+        void main()	{
+
+            vec2 cellSize = 1.0 / resolution.xy;
+
+            float waterLevel = texture2D( levelTexture, point1 ).x;
+
+            vec2 normal = vec2(
+                ( texture2D( levelTexture, point1 + vec2( - cellSize.x, 0 ) ).x - texture2D( levelTexture, point1 + vec2( cellSize.x, 0 ) ).x ) * WIDTH / BOUNDS,
+                ( texture2D( levelTexture, point1 + vec2( 0, - cellSize.y ) ).x - texture2D( levelTexture, point1 + vec2( 0, cellSize.y ) ).x ) * WIDTH / BOUNDS );
+
+            if ( gl_FragCoord.x < 1.5 ) {
+
+                gl_FragColor = encode_float( waterLevel );
+
+            } else if ( gl_FragCoord.x < 2.5 ) {
+
+                gl_FragColor = encode_float( normal.x );
+
+            } else if ( gl_FragCoord.x < 3.5 ) {
+
+                gl_FragColor = encode_float( normal.y );
+
+            } else {
+
+                gl_FragColor = encode_float( 0.0 );
+
+            }
+
+        }
+
+    </script>
+
+    <!-- This is the water visualization shader, copied from the THREE.MeshPhongMaterial and modified: -->
+    <script id="waterVertexShader" type="x-shader/x-vertex">
+
+        uniform sampler2D heightmap;
+
+        #define PHONG
+
+        varying vec3 vViewPosition;
+        varying vec4 vUv;
+        uniform mat4 textureMatrix;
+        #ifndef FLAT_SHADED
+
+            varying vec3 vNormal;
+
+        #endif
+
+        #include <common>
+        #include <uv_pars_vertex>
+        #include <displacementmap_pars_vertex>
+        #include <envmap_pars_vertex>
+        #include <color_pars_vertex>
+        #include <morphtarget_pars_vertex>
+        #include <skinning_pars_vertex>
+        #include <shadowmap_pars_vertex>
+        #include <logdepthbuf_pars_vertex>
+        #include <clipping_planes_pars_vertex>
+
+        void main() {
+
+            vec2 cellSize = vec2( 1.0 / WIDTH, 1.0 / WIDTH );
+
+            #include <uv_vertex>
+            #include <color_vertex>
+
+            // # include <beginnormal_vertex>
+            // Compute normal from heightmap
+            vec3 objectNormal = vec3(
+                ( texture2D( heightmap, uv + vec2( - cellSize.x, 0 ) ).x - texture2D( heightmap, uv + vec2( cellSize.x, 0 ) ).x ) * WIDTH / BOUNDS,
+                ( texture2D( heightmap, uv + vec2( 0, - cellSize.y ) ).x - texture2D( heightmap, uv + vec2( 0, cellSize.y ) ).x ) * WIDTH / BOUNDS,
+                1.0 );
+            //<beginnormal_vertex>
+
+            #include <morphnormal_vertex>
+            #include <skinbase_vertex>
+            #include <skinnormal_vertex>
+            #include <defaultnormal_vertex>
+
+        #ifndef FLAT_SHADED // Normal computed with derivatives when FLAT_SHADED
+
+            vNormal = normalize( transformedNormal );
+
+        #endif
+
+            //# include <begin_vertex>
+            float heightValue = texture2D( heightmap, uv ).x;
+            vec3 transformed = vec3( position.x, position.y, -heightValue );
+            //<begin_vertex>
+
+            #include <morphtarget_vertex>
+            #include <skinning_vertex>
+            #include <displacementmap_vertex>
+            #include <project_vertex>
+            #include <logdepthbuf_vertex>
+            #include <clipping_planes_vertex>
+
+            vViewPosition = - mvPosition.xyz;
+           vUv = textureMatrix * vec4( transformed, 1.0 );
+           // vUv = vec4(1.,1.,1.,1.);
+            #include <worldpos_vertex>
+            #include <envmap_vertex>
+            #include <shadowmap_vertex>
+
+           
+        }
+
+    </script>
     <script type="module">
         import * as THREE from 'three';
 
@@ -51,6 +285,101 @@
         import { ColladaLoader } from 'three/addons/ColladaLoader.js';
         import { OrbitControls } from 'three/addons/OrbitControls.js';
         import { GPUComputationRenderer } from 'three/addons/GPUComputationRenderer.js';
+        import { Reflector } from 'three/addons/Reflector.js'
+        import { SimplexNoise } from 'three/addons/SimplexNoise.js';
+
+
+        const snoiseglsl = `vec3 mod289(vec3 x) {
+  return x - floor(x * (1.0 / 289.0)) * 289.0;
+}
+
+vec4 mod289(vec4 x) {
+  return x - floor(x * (1.0 / 289.0)) * 289.0;
+}
+
+vec4 permute(vec4 x) {
+     return mod289(((x*34.0)+1.0)*x);
+}
+
+vec4 taylorInvSqrt(vec4 r)
+{
+  return 1.79284291400159 - 0.85373472095314 * r;
+}
+
+float snoise(vec3 v)
+  {
+  const vec2  C = vec2(1.0/6.0, 1.0/3.0) ;
+  const vec4  D = vec4(0.0, 0.5, 1.0, 2.0);
+
+// First corner
+  vec3 i  = floor(v + dot(v, C.yyy) );
+  vec3 x0 =   v - i + dot(i, C.xxx) ;
+
+// Other corners
+  vec3 g = step(x0.yzx, x0.xyz);
+  vec3 l = 1.0 - g;
+  vec3 i1 = min( g.xyz, l.zxy );
+  vec3 i2 = max( g.xyz, l.zxy );
+
+  //   x0 = x0 - 0.0 + 0.0 * C.xxx;
+  //   x1 = x0 - i1  + 1.0 * C.xxx;
+  //   x2 = x0 - i2  + 2.0 * C.xxx;
+  //   x3 = x0 - 1.0 + 3.0 * C.xxx;
+  vec3 x1 = x0 - i1 + C.xxx;
+  vec3 x2 = x0 - i2 + C.yyy; // 2.0*C.x = 1/3 = C.y
+  vec3 x3 = x0 - D.yyy;      // -1.0+3.0*C.x = -0.5 = -D.y
+
+// Permutations
+  i = mod289(i);
+  vec4 p = permute( permute( permute(
+             i.z + vec4(0.0, i1.z, i2.z, 1.0 ))
+           + i.y + vec4(0.0, i1.y, i2.y, 1.0 ))
+           + i.x + vec4(0.0, i1.x, i2.x, 1.0 ));
+
+// Gradients: 7x7 points over a square, mapped onto an octahedron.
+// The ring size 17*17 = 289 is close to a multiple of 49 (49*6 = 294)
+  float n_ = 0.142857142857; // 1.0/7.0
+  vec3  ns = n_ * D.wyz - D.xzx;
+
+  vec4 j = p - 49.0 * floor(p * ns.z * ns.z);  //  mod(p,7*7)
+
+  vec4 x_ = floor(j * ns.z);
+  vec4 y_ = floor(j - 7.0 * x_ );    // mod(j,N)
+
+  vec4 x = x_ *ns.x + ns.yyyy;
+  vec4 y = y_ *ns.x + ns.yyyy;
+  vec4 h = 1.0 - abs(x) - abs(y);
+
+  vec4 b0 = vec4( x.xy, y.xy );
+  vec4 b1 = vec4( x.zw, y.zw );
+
+  //vec4 s0 = vec4(lessThan(b0,0.0))*2.0 - 1.0;
+  //vec4 s1 = vec4(lessThan(b1,0.0))*2.0 - 1.0;
+  vec4 s0 = floor(b0)*2.0 + 1.0;
+  vec4 s1 = floor(b1)*2.0 + 1.0;
+  vec4 sh = -step(h, vec4(0.0));
+
+  vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy ;
+  vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww ;
+
+  vec3 p0 = vec3(a0.xy,h.x);
+  vec3 p1 = vec3(a0.zw,h.y);
+  vec3 p2 = vec3(a1.xy,h.z);
+  vec3 p3 = vec3(a1.zw,h.w);
+
+//Normalise gradients
+  vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2, p2), dot(p3,p3)));
+  p0 *= norm.x;
+  p1 *= norm.y;
+  p2 *= norm.z;
+  p3 *= norm.w;
+
+// Mix final noise value
+  vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
+  m = m * m;
+  return 42.0 * dot( m*m, vec4( dot(p0,x0), dot(p1,x1),
+                                dot(p2,x2), dot(p3,x3) ) );
+  }`
 
 
         const loaderAlone = new GLTFLoader();
@@ -78,15 +407,66 @@
         let skinIndices = new THREE.Vector4();
         let skinWeights = new THREE.Vector4();
         let boneMatrix = new THREE.Matrix4();
-        let sendVar
+        let sendVar, mirrorFront1
         //gpgpu
-        let geometryPointGPU, materialPointGPU, gpuCompute, texturePositionVariable
+        let geometryPointGPU, materialPointGPU, gpuCompute, texturePositionVariable, controls2
         let positionUniforms, velocityUniforms
         const UPSIZE_ = 3
         const WIDTHGPGPU = 154 * UPSIZE_; // dư ra 1 ít
         let lastTimeFixed = 0
         let previousFrame = 0
         let countLoopSnap = 0
+        const totalFrame = 95
+        const offset = 300
+        const pointEachFrame = 200
+        const speedModel = 1
+        let arrayFrameOffset = []
+
+
+        //minnor
+        const reflectorPlane = new THREE.Plane();
+        const normal = new THREE.Vector3();
+        const reflectorWorldPosition = new THREE.Vector3();
+        const cameraWorldPosition = new THREE.Vector3();
+        const rotationMatrix = new THREE.Matrix4();
+        const lookAtPosition = new THREE.Vector3(0, 0, - 1);
+        const clipPlane = new THREE.Vector4();
+        const clipBias = 0.
+        const view = new THREE.Vector3();
+        const target = new THREE.Vector3();
+        const q = new THREE.Vector4();
+
+        const textureMatrix = new THREE.Matrix4();
+
+
+        //WATER
+        // Texture width for simulation
+        const WIDTH = 128;
+
+        // Water size in system units
+        const BOUNDS = 512;
+        const BOUNDS_HALF = BOUNDS * 0.5;
+        const raycaster = new THREE.Raycaster();
+        let mouseMoved = false;
+        const mouseCoords = new THREE.Vector2();
+        let waterMesh;
+        let meshRay;
+        let heightmapVariable;
+        let waterUniforms;
+        let smoothShader;
+        let readWaterLevelShader;
+        let readWaterLevelRenderTarget;
+        let readWaterLevelImage;
+        const waterNormal = new THREE.Vector3();
+
+        const NUM_SPHERES = 5;
+        const spheres = [];
+        let spheresEnabled = true;
+
+        const simplex = new SimplexNoise();
+
+        let save_projectionMatrix_minor =  new THREE.Matrix4()
+
         let vertexShaderPointGPU = `
             precision mediump float;
 
@@ -117,8 +497,10 @@
 
                 vec4 posSnap = texture(uTexSnapCPU, uvID).xyzw;
                 vec4 posOnlyDra = texture(VATDragon, vec2(uvID.x,1.-uvID.y)).xyzw;
-            
-                vec4 mvPosition = modelViewMatrix * vec4( pos.xyz , 1.);
+
+    
+                
+                vec4 mvPosition = modelViewMatrix * vec4(  pos.xyz , 1.);
              
                
                 gl_Position = projectionMatrix * mvPosition;
@@ -149,7 +531,7 @@
                         vec4 rlrl = vec4(vec3(aa),1.);
 
                         if(vPos.w < .5) {
-                             gl_FragColor = vec4(vec3(1.,1.,1.),.05);
+                             gl_FragColor = vec4(vec3(1.,1.,1.),.2);
                         }else{
                              gl_FragColor = vec4(vPos.xyz,.4);
                             }
@@ -224,7 +606,50 @@
                     return posDragonAnim.xyz;
             }
 
-           
+
+            ${snoiseglsl}
+            vec3 snoiseVec3( vec3 x ){
+
+            float s  = snoise(vec3( x ));
+                float s1 = snoise(vec3( x.y - 19.1 , x.z + 33.4 , x.x + 47.2 ));
+                float s2 = snoise(vec3( x.z + 74.2 , x.x - 124.5 , x.y + 99.4 ));
+                vec3 c = vec3( s , s1 , s2 );
+                return c;
+
+                }
+
+
+                vec3 curlNoise( vec3 p ){
+                
+                const float e = .1;
+                vec3 dx = vec3( e   , 0.0 , 0.0 );
+                vec3 dy = vec3( 0.0 , e   , 0.0 );
+                vec3 dz = vec3( 0.0 , 0.0 , e   );
+
+                vec3 p_x0 = snoiseVec3( p - dx );
+                vec3 p_x1 = snoiseVec3( p + dx );
+                vec3 p_y0 = snoiseVec3( p - dy );
+                vec3 p_y1 = snoiseVec3( p + dy );
+                vec3 p_z0 = snoiseVec3( p - dz );
+                vec3 p_z1 = snoiseVec3( p + dz );
+
+                float x = p_y1.z - p_y0.z - p_z1.y + p_z0.y;
+                float y = p_z1.x - p_z0.x - p_x1.z + p_x0.z;
+                float z = p_x1.y - p_x0.y - p_y1.x + p_y0.x;
+
+                const float divisor = 1.0 / ( 2.0 * e );
+                return normalize( vec3( x , y , z ) * divisor );
+
+                }
+
+            vec4 NoiseSphere(vec4 outRls,vec2 uv,float time) {
+                float zToSphere = uv.y-uv.x;
+
+                outRls.xyzw = vec4(curlNoise(vec3(rand(uv),uv.y,atan(uv.y,uv.x)) + time / 5.),0.3636);
+                outRls.y += 3.5;
+                return outRls;
+            } 
+            
             void main()	{
                 vec2 uv = gl_FragCoord.xy / resolution.xy;
                 vec4 tmpPos = texture2D( uTexturePosition, uv ); // get current positions from texture 
@@ -276,17 +701,36 @@
                         }
                 }
        
-               //if(uv.y <.6 && uv.y > .1) posDragonAnim.z -= posDragonAnim.w;
+             // if(uv.y <.6 ) posDragonAnim.z -= uTime/5.;
 
 
-                vec4 outRls = posDragonAnim + posDragonOrigin;
+                vec4 outRls = posDragonAnim + posDragonOrigin * 1.;
                 outRls.w = posDragonAnim.w;
-                gl_FragColor = outRls;
+                vec4 outRls1 = vec4(1.);
+                vec4 outRls2 = vec4(1.);
+                // cho tí background particel
+                if(uv.y < .6 && uv.y > .58) {
+                    outRls2 += NoiseSphere(outRls,uv,uTime);
+                }else if(uv.y < .54 && uv.y > .50) {
+                    // outRls2.x -= 7.;
+
+                    // outRls2.z -= fract(uTime  + uv.x) ;
+                    // if(outRls2.z < -1.) {
+                    //     outRls2.z = 2.;
+                    // }
+                    // outRls2.x -= rand(uv) * 20. - 17.;
+                    
+                    // outRls2.y -= rand(vec2(uv.x,1.-uv.y)) * 10. - 7.;
+                    // outRls2.z -= rand(vec2(uv.y,1.-uv.x)) * 20. - 10.;
+                    // outRls2 += NoiseSphere(outRls,uv,uTime/5.);
+                }else{
+                }
+
+                gl_FragColor = outRls + outRls2;
              
             }
 
             `;
-
 
         let simulationFragResult = `
                 uniform sampler2D uTexturePosition;
@@ -310,6 +754,133 @@
                  gl_FragColor = pos;
                 }
             `
+
+        //water
+
+        function initWater() {
+
+            const materialColor = 0x0040C0;
+
+            const geometry = new THREE.PlaneGeometry(BOUNDS, BOUNDS, WIDTH - 1, WIDTH - 1);
+
+            // material: make a THREE.ShaderMaterial clone of THREE.MeshPhongMaterial, with customized vertex shader
+            const material = new THREE.ShaderMaterial({
+                uniforms: THREE.UniformsUtils.merge([
+                    THREE.ShaderLib['phong'].uniforms,
+                    {
+                        'heightmap': { value: null },
+                        'fboMinor': { value: null },
+                        'textureMatrix': { value: new THREE.Matrix4() }
+                    }
+                ]),
+                vertexShader: document.getElementById('waterVertexShader').textContent,
+             //   fragmentShader: THREE.ShaderChunk['meshphong_frag'],
+                fragmentShader: `
+                     uniform sampler2D fboMinor;
+                 varying vec4 vUv;
+                    void main() {
+                    vec4 base = texture2DProj( fboMinor, vec4(vUv.x ,vUv.y,vUv.z,vUv.w)* 55. );
+                             //  vec4 tex = texture2D(fboMinor,vUv);
+                    gl_FragColor =base;
+                    }
+                `,
+                wireframe:false
+
+            });
+
+            material.lights = true;
+
+            // Material attributes from THREE.MeshPhongMaterial
+            // Sets the uniforms with the material values
+            material.uniforms['diffuse'].value = new THREE.Color(materialColor);
+            material.uniforms['specular'].value = new THREE.Color(0x111111);
+            material.uniforms['shininess'].value = Math.max(50, 1e-4);
+            material.uniforms['opacity'].value = material.opacity;
+        
+
+            // Defines
+            material.defines.WIDTH = WIDTH.toFixed(1);
+            material.defines.BOUNDS = BOUNDS.toFixed(1);
+
+            waterUniforms = material.uniforms;
+
+            waterMesh = new THREE.Mesh(geometry, material);
+            waterMesh.rotation.x = - Math.PI / 2;
+            waterMesh.matrixAutoUpdate = false;
+            waterMesh.updateMatrix();
+       
+            scene.add(waterMesh);
+
+            // THREE.Mesh just for mouse raycasting
+            const geometryRay = new THREE.PlaneGeometry(BOUNDS, BOUNDS, 1, 1);
+            meshRay = new THREE.Mesh(geometryRay, new THREE.MeshBasicMaterial({ color: "red", visible: false }));
+            meshRay.rotation.x = - Math.PI / 2;
+            meshRay.matrixAutoUpdate = false;
+            meshRay.updateMatrix();
+            scene.add(meshRay);
+
+
+        }
+
+        function fillTexture(texture) {
+
+            const waterMaxHeight = 10;
+
+            function noise(x, y) {
+
+                let multR = waterMaxHeight;
+                let mult = 0.025;
+                let r = 0;
+                for (let i = 0; i < 15; i++) {
+
+                    r += multR * simplex.noise(x * mult, y * mult);
+                    multR *= 0.53 + 0.025 * i;
+                    mult *= 1.25;
+
+                }
+
+                return r;
+
+            }
+
+            const pixels = texture.image.data;
+
+            let p = 0;
+            for (let j = 0; j < WIDTH; j++) {
+
+                for (let i = 0; i < WIDTH; i++) {
+
+                    const x = i * 128 / WIDTH;
+                    const y = j * 128 / WIDTH;
+
+                    pixels[p + 0] = noise(x, y);
+                    pixels[p + 1] = pixels[p + 0];
+                    pixels[p + 2] = 0;
+                    pixels[p + 3] = 1;
+
+                    p += 4;
+
+                }
+
+            }
+
+        }
+        function setMouseCoords(x, y) {
+
+            mouseCoords.set((x / renderer.domElement.clientWidth) * 2 - 1, - (y / renderer.domElement.clientHeight) * 2 + 1);
+            mouseMoved = true;
+
+        }
+
+        function onPointerMove(event) {
+
+            if (event.isPrimary === false) return;
+
+            setMouseCoords(event.clientX, event.clientY);
+
+        }
+
+        //particel
         const fillPositions = (texture) => {
             let arr = texture.image.data
             let temp = new THREE.Vector3();
@@ -348,7 +919,7 @@
             // send position info into geometry aka vertex shader
             geometryPointGPU.setAttribute('position', new THREE.BufferAttribute(positions, 3))
             geometryPointGPU.setAttribute('reference', new THREE.BufferAttribute(reference, 2))
-       
+
 
             materialPointGPU = new THREE.ShaderMaterial({
                 // depthWrite: false,
@@ -376,7 +947,7 @@
 
         }
 
-        let textureResultVariable, resultUniforms
+        let textureResultVariable, resultUniforms, cameraVitrualForMinor
         function initGPGPU() {
             // Khởi tạo GPUComputationRenderer
             gpuCompute = new GPUComputationRenderer(WIDTHGPGPU, WIDTHGPGPU, renderer);
@@ -411,7 +982,7 @@
             positionUniforms['uTimeFixed'] = { value: 0.0 };
             positionUniforms['VATDragon'] = { value: null };
             positionUniforms['VATDragonSnap'] = { value: null };
-            
+
             // Thiết lập uniforms cho kết quả
             resultUniforms = textureResultVariable.material.uniforms;
             resultUniforms['uTime'] = { value: 0.0 };
@@ -420,6 +991,50 @@
 
             resultUniforms['VATDragonPrev'] = { value: null }; // Nếu cần thiết
             // Khởi tạo GPU computation
+            
+            // Creates the gpu computation class and sets it up
+
+
+            const heightmap0 = gpuCompute.createTexture();
+
+            fillTexture(heightmap0);
+
+            heightmapVariable = gpuCompute.addVariable('heightmap', document.getElementById('heightmapFragmentShader').textContent, heightmap0);
+
+            gpuCompute.setVariableDependencies(heightmapVariable, [heightmapVariable]);
+
+            heightmapVariable.material.uniforms['mousePos'] = { value: new THREE.Vector2(10000, 10000) };
+            heightmapVariable.material.uniforms['mouseSize'] = { value: 80.0 };
+            heightmapVariable.material.uniforms['viscosityConstant'] = { value: 0.98 };
+            heightmapVariable.material.uniforms['heightCompensation'] = { value: 0 };
+            heightmapVariable.material.defines.BOUNDS = BOUNDS.toFixed(1);
+
+          
+            // Create compute shader to smooth the water surface and velocity
+            smoothShader = gpuCompute.createShaderMaterial(document.getElementById('smoothFragmentShader').textContent, { smoothTexture: { value: null } });
+
+            // Create compute shader to read water level
+            readWaterLevelShader = gpuCompute.createShaderMaterial(document.getElementById('readWaterLevelFragmentShader').textContent, {
+                point1: { value: new THREE.Vector2() },
+                levelTexture: { value: null }
+            });
+            readWaterLevelShader.defines.WIDTH = WIDTH.toFixed(1);
+            readWaterLevelShader.defines.BOUNDS = BOUNDS.toFixed(1);
+
+            // Create a 4x1 pixel image and a render target (Uint8, 4 channels, 1 byte per channel) to read water height and orientation
+            readWaterLevelImage = new Uint8Array(4 * 1 * 4);
+
+            readWaterLevelRenderTarget = new THREE.WebGLRenderTarget(4, 1, {
+                wrapS: THREE.ClampToEdgeWrapping,
+                wrapT: THREE.ClampToEdgeWrapping,
+                minFilter: THREE.NearestFilter,
+                magFilter: THREE.NearestFilter,
+                format: THREE.RGBAFormat,
+                type: THREE.UnsignedByteType,
+                depthBuffer: false
+            });
+
+
             gpuCompute.init();
 
             // Tạo particles
@@ -429,6 +1044,23 @@
             showTexture();
         }
 
+        const renderTargetCuoiCung = new THREE.WebGLRenderTarget(window.innerWidth / 2, window.innerHeight / 2, { samples: 4, type: THREE.HalfFloatType });
+
+        let toggleDeltaUpdate = true;
+        function toggleDelta(dom) {
+            toggleDeltaUpdate = !toggleDeltaUpdate;
+            if (toggleDeltaUpdate) {
+                dom.textContent = "Stop delta";
+            } else {
+                dom.textContent = "Resume Delta";
+            }
+        }
+        const delta_toggle = document.getElementById("stop_delta");
+        if (delta_toggle) {
+            delta_toggle.addEventListener('click', (e) => {
+                toggleDelta(e.target);
+            });
+        }
 
         init();
 
@@ -436,6 +1068,7 @@
         //set lại camera và showTexture size/pos
         // khi bật thì gpgpu sẽ lấy nhầm / hoặc cơ chế gpgpu dành cho 1 rendered
         initModelAndPrepare();
+        initWater()
         animate();
 
 
@@ -454,6 +1087,11 @@
                 data[stride + 1] = 0;
                 data[stride + 2] = 0;
                 data[stride + 3] = 1;
+                if (i < 40000 && i < 39000) {
+                    data[stride] = Math.random();
+                    data[stride + 1] = Math.random();
+                    data[stride + 2] = Math.random();
+                }
             }
 
             textureFBOSnap = new THREE.DataTexture(data, width, height, THREE.RGBAFormat, THREE.FloatType);
@@ -566,7 +1204,7 @@
             meshShowTexture2 = new THREE.Mesh(geometry, shaderMaterial2);
             meshShowTexture2.position.x = -3
 
-         //   scene.add(meshShowTexture2);
+            //   scene.add(meshShowTexture2);
 
         }
 
@@ -584,8 +1222,8 @@
                     child.material.wireframe = false
 
                     skinnedMesh = child
-            
-               
+
+
                     skinnedMesh.geometry.index = null
                     // set for use AABB , chưa hiểu vì sao có index thì err
                     // index của model này quá lớn
@@ -634,13 +1272,16 @@
 
             // camera
 
-            camera = new THREE.PerspectiveCamera(45, width / height, 0.000001, 1000);
-            camera.position.set(4, 2, 4)
+            camera = new THREE.PerspectiveCamera(45, width / height, 0.01, 1000);
+            camera.position.set(7, 7, 7)
             camera.lookAt(new THREE.Vector3(0, 0, 0))
+            cameraVitrualForMinor = new THREE.PerspectiveCamera(45, width / height, 0.01, 1000);
+            cameraVitrualForMinor.position.set(4, 4, 4)
             // renderer
             cameraO = new THREE.OrthographicCamera(width / - 345, width / 345, height / 345, height / - 345, 0.001, 1000);
             cameraO.position.set(0, 0, 1)
             renderer = new THREE.WebGLRenderer({ antialias: true });
+            
             renderer.setClearColor(0x222222)
             renderer.setClearAlpha(0)
             renderer.setPixelRatio(window.devicePixelRatio);
@@ -655,10 +1296,36 @@
             scene.background = new THREE.Color(0x00000);
             const light = new THREE.AmbientLight(0x404040, 20); // soft white light
             scene.add(light);
+
+            const axesHelper = new THREE.AxesHelper(5);
+            scene.add(axesHelper);
+            mirrorFront1 = new Reflector(new THREE.PlaneGeometry(100, 100), {
+                color: new THREE.Color(0x7f7f7f),
+
+                textureWidth: window.innerWidth * window.devicePixelRatio,
+                textureHeight: window.innerHeight * window.devicePixelRatio,
+            })
+
+            mirrorFront1.rotation.x = 4.7
+            mirrorFront1.position.y = -2.2
+
+       //     scene.add(mirrorFront1)
+
+            
+				const sun = new THREE.DirectionalLight( 0xFFFFFF, 3.0 );
+				sun.position.set( 300, 400, 175 );
+				scene.add( sun );
+
+				const sun2 = new THREE.DirectionalLight( 0x40A040, 2.0 );
+				sun2.position.set( - 100, 350, - 200 );
+				scene.add( sun2 );
+
+
             // controls
 
             controls = new OrbitControls(camera, renderer.domElement);
 
+            // controls2 = new OrbitControls(cameraVitrualForMinor, renderer.domElement);
             // stats
 
             stats = new Stats();
@@ -811,9 +1478,9 @@
 
 
                     const printFromSmooth = 0
-                    textureFBO.source.data.data[(i * 4) + printFromSmooth] = skinned.x / 12;
-                    textureFBO.source.data.data[(i * 4 + 1) + printFromSmooth] = skinned.y / 12;
-                    textureFBO.source.data.data[(i * 4 + 2) + printFromSmooth] = skinned.z / 12;
+                    textureFBO.source.data.data[(i * 4) + printFromSmooth] = skinned.x / 2 - 1.;
+                    textureFBO.source.data.data[(i * 4 + 1) + printFromSmooth] = skinned.y / 2 - 1.;
+                    textureFBO.source.data.data[(i * 4 + 2) + printFromSmooth] = skinned.z / 2 - 1.;
                     const printFrom1 = 0
                     /*   if (sendVar === true) {
                         
@@ -849,71 +1516,152 @@
         }
 
         function getRandomIntFromTwoRanges(range1, range2) {
-        const useFirstRange = Math.random() > 0.8; // 50% xác suất chọn range1 hoặc range2
-        if (useFirstRange) {
-            return getRandomIntInRange(range1[0], range1[1]);
-        } else {
-            return getRandomIntInRange(range2[0], range2[1]);
+            const useFirstRange = Math.random() > 0.8; // 50% xác suất chọn range1 hoặc range2
+            if (useFirstRange) {
+                return getRandomIntInRange(range1[0], range1[1]);
+            } else {
+                return getRandomIntInRange(range2[0], range2[1]);
+            }
         }
-    }
-        function remixTexture(target, snap, countSnap, lastTimeFixed,time) {
-            // 18 line // set 17 from 0
-            const offset = 1000
-            const pointEachFrame = WIDTHGPGPU
-            const prevFrame = offset * countSnap * 5
-            for (let j = 0; j < 1; j++) {
-                    for (let i = 0; i < pointEachFrame; i++) {
-                       snap.source.data.data[(i * 4) + prevFrame] = 1;
-                        snap.source.data.data[(i * 4 + 1) + prevFrame] = 1;
-                        snap.source.data.data[(i * 4 + 2) + prevFrame] = 1;
-                       snap.source.data.data[(i * 4 + 3)] = countSnap;
+
+        function remixTexture(target, snap, countSnap) {
+
+            const nextFrame = ((offset * 4) * countSnap)
+            let normalizeCountFrame = countSnap / totalFrame
+            if (arrayFrameOffset.length < totalFrame) {
+                arrayFrameOffset.push(nextFrame);
+            }
+
+            for (let j = 0; j < arrayFrameOffset.length; j++) {
+                if (arrayFrameOffset[j] !== nextFrame) {
+                    for (let e = 0; e < pointEachFrame; e++) {
+                        snap.source.data.data[(e * 4 + 2) + arrayFrameOffset[j]] -= .36
                     }
-                  
                 }
+            }
+
             snap.needsUpdate = true;
         }
-        function snapTexture(target, snap, countSnap, lastTimeFixed,time) {
-       
 
-            const offset = 1000
-            const pointEachFrame = 1000
-            const nextFrame = offset * countSnap * 5
-            
-                for (let i = 0; i < pointEachFrame; i++) {
-                    // custom = mắt 
-                    // (0, 1200) , cánh nè
-                    // (8000, 8200) , đuôi nè
-                    // khoảng 1k2 đến 1k3,4 là đầu
-                    const randomAll = getRandomIntInRange(0, 20000);
-                    const random2CaiCanh = getRandomIntInRange(0, 1400);
-                    const randomCaiDuoi = getRandomIntInRange(8000, 8200);
-                    const randomCanhVaDuoi = getRandomIntFromTwoRanges([0, 1200], [8000, 8200]);
+        function snapTexture(target, snap, countSnap, lastTimeFixed, time) {
+            // update index frame
 
-                    snap.source.data.data[(i * 4) + nextFrame] = textureFBO.source.data.data[(random2CaiCanh * 4)];
-                        snap.source.data.data[(i * 4 + 1) + nextFrame] = textureFBO.source.data.data[(random2CaiCanh * 4 + 1)];
-                        snap.source.data.data[(i * 4 + 2) + nextFrame] = textureFBO.source.data.data[(random2CaiCanh * 4 + 2)] - .1;
-                        snap.source.data.data[(i * 4 + 3) + nextFrame] = .4242;
 
-                    // if(snap.source.data.data[(i * 4) + nextFrame] < 0.2) {
-                        
-                    // }else{
-                    //     snap.source.data.data[(i * 4) + nextFrame] = 0;
-                    //     snap.source.data.data[(i * 4 + 1) + nextFrame] = 0;
-                    //     snap.source.data.data[(i * 4 + 2) + nextFrame] = 0;
-                    //     snap.source.data.data[(i * 4 + 3) + nextFrame] = countSnap;
-                    // }
-                }
-                // if (countSnap > 1) {
-                // const previousFrame = offset * (countSnap - 2);
-                //     for (let i = 0; i < pointEachFrame; i++) {
-                //         snap.source.data.data[(i * 4 + 2) + previousFrame] -= 2.5; // Set the Green channel to 0
-                //     }
-                // }
 
-               
+            const nextFrame = ((offset * 4) * countSnap)
+            for (let i = 0; i < pointEachFrame; i++) {
+                // custom = mắt 
+                // có thể sắp xếp từng cụm vert trong blender
+                // (0, 1200) , cánh nè
+                // (8000, 8200) , đuôi nè
+                // khoảng 1k2 đến 1k3,4 là đầu
+                const randomAll = getRandomIntInRange(0, 20000);
+                const random2CaiCanh = getRandomIntInRange(0, 1400);
+                const randomCaiDuoi = getRandomIntInRange(8000, 8200);
+                const randomCanhVaDuoi = getRandomIntFromTwoRanges([0, 1200], [8000, 8200]);
+
+                const downSize = (countSnap / totalFrame) * 0
+                // cái này phải xác định trục z của model
+                // thêm 1 buffer sp những val này, cập nhật từ aabb, xuất thành matrix
+
+
+
+                snap.source.data.data[(i * 4) + nextFrame] = textureFBO.source.data.data[(random2CaiCanh * 4)] + downSize;
+                snap.source.data.data[(i * 4 + 1) + nextFrame] = textureFBO.source.data.data[(random2CaiCanh * 4 + 1)] + downSize;
+                snap.source.data.data[(i * 4 + 2) + nextFrame] = textureFBO.source.data.data[(random2CaiCanh * 4 + 2)] - 0.042 + downSize;
+                snap.source.data.data[(i * 4 + 3) + nextFrame] = 0.4242;
+                // mark frame
+
+                // let rand = Math.random()
+                // snap.source.data.data[(i * 4) + 150000] = rand;
+                // snap.source.data.data[(i * 4 + 1) + 150000] = rand;
+                // snap.source.data.data[(i * 4 + 2) + 150000] = 0;
+            }
+
+
+
             snap.needsUpdate = true;
 
 
+        }
+
+        function calculateCam(virtualCamera, scope, cameraWord) {
+
+            reflectorWorldPosition.setFromMatrixPosition(scope.matrixWorld);
+            cameraWorldPosition.setFromMatrixPosition(cameraWord.matrixWorld);
+
+            rotationMatrix.extractRotation(scope.matrixWorld);
+
+            normal.set(0, 0, 1);
+            normal.applyMatrix4(rotationMatrix);
+
+            view.subVectors(reflectorWorldPosition, cameraWorldPosition);
+
+            // Avoid rendering when reflector is facing away
+
+            if (view.dot(normal) > 0) return;
+
+            view.reflect(normal).negate();
+            view.add(reflectorWorldPosition);
+
+            rotationMatrix.extractRotation(cameraWord.matrixWorld);
+
+            lookAtPosition.set(0, 0, - 1);
+            lookAtPosition.applyMatrix4(rotationMatrix);
+            lookAtPosition.add(cameraWorldPosition);
+
+            target.subVectors(reflectorWorldPosition, lookAtPosition);
+            target.reflect(normal).negate();
+            target.add(reflectorWorldPosition);
+
+            virtualCamera.position.copy(view);
+            virtualCamera.up.set(0, 1, 0);
+            virtualCamera.up.applyMatrix4(rotationMatrix);
+            virtualCamera.up.reflect(normal);
+            virtualCamera.lookAt(target);
+
+            virtualCamera.far = cameraWord.far; // Used in WebGLBackground
+
+            virtualCamera.updateMatrixWorld();
+            virtualCamera.projectionMatrix.copy(cameraWord.projectionMatrix);
+
+            // Update the texture matrix
+            textureMatrix.set(
+                0.5, 0.0, 0.0, 0.5,
+                0.0, 0.5, 0.0, 0.5,
+                0.0, 0.0, 0.5, 0.5,
+                0.0, 0.0, 0.0, 1.0
+            );
+            textureMatrix.multiply(virtualCamera.projectionMatrix);
+            textureMatrix.multiply(virtualCamera.matrixWorldInverse);
+            textureMatrix.multiply(scope.matrixWorld);
+
+            // Now update projection matrix with new clip plane, implementing code from: http://www.terathon.com/code/oblique.html
+            // Paper explaining this technique: http://www.terathon.com/lengyel/Lengyel-Oblique.pdf
+            reflectorPlane.setFromNormalAndCoplanarPoint(normal, reflectorWorldPosition);
+            reflectorPlane.applyMatrix4(virtualCamera.matrixWorldInverse);
+
+            clipPlane.set(reflectorPlane.normal.x, reflectorPlane.normal.y, reflectorPlane.normal.z, reflectorPlane.constant);
+
+            const projectionMatrix = virtualCamera.projectionMatrix;
+
+            q.x = (Math.sign(clipPlane.x) + projectionMatrix.elements[8]) / projectionMatrix.elements[0];
+            q.y = (Math.sign(clipPlane.y) + projectionMatrix.elements[9]) / projectionMatrix.elements[5];
+            q.z = - 1.0;
+            q.w = (1.0 + projectionMatrix.elements[10]) / projectionMatrix.elements[14];
+
+            // Calculate the scaled plane vector
+            clipPlane.multiplyScalar(2.0 / clipPlane.dot(q));
+
+            // Replacing the third row of the projection matrix
+            projectionMatrix.elements[2] = clipPlane.x;
+            projectionMatrix.elements[6] = clipPlane.y;
+            projectionMatrix.elements[10] = clipPlane.z + 1.0 - clipBias;
+            projectionMatrix.elements[14] = clipPlane.w;
+
+            save_projectionMatrix_minor = projectionMatrix
+
+      
         }
 
         function render() {
@@ -921,50 +1669,99 @@
             const elapsedTime = clock.getElapsedTime()
 
             //GPGPU
-            positionUniforms['uTimeFixed'].value = elapsedTime.toFixed(1);
-            positionUniforms['uTime'].value = clock.getElapsedTime()
-            positionUniforms['VATDragon'].value = textureFBO;
-        
+            if (toggleDeltaUpdate) {
+                positionUniforms['uTimeFixed'].value = elapsedTime.toFixed(1);
+                positionUniforms['uTime'].value = clock.getElapsedTime()
 
-            resultUniforms['uTimeFixed'].value = elapsedTime.toFixed(1);
-            resultUniforms['uTime'].value = clock.getElapsedTime()
+                resultUniforms['uTimeFixed'].value = elapsedTime.toFixed(1);
+                resultUniforms['uTime'].value = clock.getElapsedTime()
+
+                materialPointGPU.uniforms.uTimeFixed.value = elapsedTime.toFixed(1)
+                materialPointGPU.uniforms.uTime.value = clock.getElapsedTime()
+            }
+
+            positionUniforms['VATDragon'].value = textureFBO;
+
+
+
             resultUniforms['VATDragon'].value = textureFBO;
             resultUniforms['VATDragonPrev'].value = gpuCompute.getCurrentRenderTarget(texturePositionVariable).texture;
 
-            materialPointGPU.uniforms.uTimeFixed.value = elapsedTime.toFixed(1)
-            materialPointGPU.uniforms.uTime.value = clock.getElapsedTime()
+
             materialPointGPU.uniforms.VATDragon.value = textureFBO
 
             const timefixed = Math.abs(Number(elapsedTime.toFixed(1)))
-          
-          
+
+            let countFrameSnapClone = 0
+
             //Fuck SkinnedMesh
             if (mixer !== undefined) {
                 // mixer.setTime(1.5);
-                mixer.update(delta);
+                const timeNoituyen = Math.sin(delta * 3. + speedModel / 100.)
+                if (toggleDeltaUpdate) mixer.update(timeNoituyen);
+
                 updateAABB(skinnedMesh, aabb, sendVar);
-               
-              
-                if (elapsedTime - lastTime >= 0.1) {
+
+
+                if (toggleDeltaUpdate) {
                     countLoopSnap += 1
-                    if(countLoopSnap >  17)  countLoopSnap = 0
-                  snapTexture(textureFBO, textureFBOSnap, countLoopSnap, lastTimeFixed,clock.getElapsedTime())
+                    if (countLoopSnap > totalFrame) countLoopSnap = 1 // để vòng loop mới get đc 0
+                    snapTexture(textureFBO, textureFBOSnap, countLoopSnap, lastTimeFixed, clock.getElapsedTime())
+                    remixTexture(textureFBO, textureFBOSnap, countLoopSnap)
+                }
+
+
+                if (elapsedTime - lastTime >= 0.1) {
+
+
                     sendVar = true;
                     lastTime = elapsedTime;
                 } else {
                     sendVar = false;
                 }
-                
-                remixTexture(textureFBO, textureFBOSnap, countLoopSnap, lastTimeFixed,clock.getElapsedTime())
+
+
 
             }
+
+            const uniforms = heightmapVariable.material.uniforms;
+            if (!mouseMoved) {
+             
+                raycaster.setFromCamera(mouseCoords, camera);
+              
+                const intersects = raycaster.intersectObject(meshRay);
+
+                if (intersects.length > 0) {
+
+                    const point = intersects[0].point;
+                    // not work
+                   // console.log(point.x, point.z)
+
+                    uniforms['mousePos'].value.set(point.x, point.z);
+
+                } else {
+                    let valueM =  uniforms['mousePos'].value
+                    uniforms['mousePos'].value.set(50000, 50000);
+
+                }
+
+                mouseMoved = false;
+
+            } else {
+              
+                uniforms['mousePos'].value.set(10000, -10000);
+
+            }
+            waterUniforms['heightmap'].value = gpuCompute.getCurrentRenderTarget(heightmapVariable).texture;
+        
+            
             materialPointGPU.uniforms.uTexSnapCPU.value = textureFBOSnap
             positionUniforms['VATDragonSnap'].value = textureFBOSnap;
 
             gpuCompute.compute()
             materialPointGPU.uniforms.uTexturePosition.value = gpuCompute.getCurrentRenderTarget(texturePositionVariable).texture;
             materialPointGPU.uniforms.uTextureResult.value = gpuCompute.getCurrentRenderTarget(textureResultVariable).texture;
-
+           
 
 
             if (materialPoint) materialPoint.uniforms.dataTexture.value = gpuCompute.getCurrentRenderTarget(texturePositionVariable).texture;
@@ -972,8 +1769,49 @@
                 meshShowTexture1.material.uniforms.renderTex.value = gpuCompute.getCurrentRenderTarget(texturePositionVariable).texture;;
                 meshShowTexture2.material.uniforms.renderTex.value = textureFBOSnap;
             }
-         
+
+
+
+            const currentRenderTarget = renderer.getRenderTarget();
+
+            // Render cảnh vào renderTarget
+            renderer.setRenderTarget(renderTargetCuoiCung);
+            // khi bật cái này , fps better a litt
+            // renderer.clear(); // Xóa render target nếu cần
+
+            //    cameraVitrualForMinor.scale.y = -1;
+            //  cameraVitrualForMinor.position.set(camera.position.x,camera.position.y,camera.position.z)
+
+            //  cameraVitrualForMinor.position.multiplyScalar(4)
+            // cameraVitrualForMinor.rotation.set(camera.rotation.x,camera.rotation.y,camera.rotation.z)
+
+            // Tính toán vị trí cam qua Reflector.js , cập nhật matrix của mesh so với camera chính ( camera cảnh chính) và vitrual camera
+            calculateCam(cameraVitrualForMinor, mirrorFront1, camera)
+          
+           // waterUniforms['textureMatrix'].value = targetne;
+            renderer.render(scene, cameraVitrualForMinor);
+
+            // Phục hồi render target ban đầu
+            renderer.setRenderTarget(currentRenderTarget);
+
+            // Cập nhật texture cho mirrorFront1
+            let targetne = renderTargetCuoiCung.texture
+
+            // not work
+            // targetne.flipY = true
+            // targetne.needsUpdate = true
+            // targetne.repeat.x = - 1;
+
+
+            mirrorFront1.material.uniforms["tDiffuse"].value = targetne;
+            waterUniforms['fboMinor'].value = targetne;
+           
+            waterUniforms['textureMatrix'].value = save_projectionMatrix_minor;
+            console.log( save_projectionMatrix_minor)
+            // Render cảnh chính
+            camera.scale.y = 1;
             renderer.render(scene, camera);
+
 
         }
 
